@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: hang-mu-online
+    runtime: docker
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: ROOM_CAPACITY
+        value: "30"

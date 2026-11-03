@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#170b0a">
+  <title>HANG MU ONLINE</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+  <div id="landing" class="screen">
+    <div class="hero">
+      <div class="crest" aria-label="Biểu tượng Hang MU"><svg class="cave-logo" viewBox="0 0 100 112" role="img"
+          aria-label="Biểu tượng Hang MU">
+          <path class="logo-stone" d="M9 91V48C9 25 27 8 50 8s41 17 41 40v43H76V49c0-14-11-25-26-25S24 35 24 49v42z" />
+          <path class="logo-flame"
+            d="M50 37c-2 12-15 17-15 31a15 15 0 0 0 30 0c0-8-5-14-9-19 0 8-4 11-6 12 2-10-2-17 0-24z" />
+          <path class="logo-base" d="M28 94h44v8H28z" />
+        </svg></div>
+      <p class="eyebrow">RED DEVILS · VIRTUAL FAN CAVE</p>
+      <h1>HANG MU <span>ONLINE</span></h1>
+      <p class="intro">MU đang trong tình trạng khá tồi tệ… nhưng anh em vẫn còn chỗ tụ họp, cà khịa và cùng nhau giữ
+        vững tinh thần!</p>
+      <div class="hang-meme"><span class="meme-dot"></span><b>CHẾ ĐỘ HANG:</b> “Tôi không trốn, tôi đang phân tích tình
+        hình!”</div>
+      <div class="room-preview">
+        <div class="room-preview-head"><b>CHỌN PHÒNG MUỐN VÀO</b><span id="roomTotal">Đang tải…</span></div>
+        <p class="room-instruction">Chọn một trong 4 hang. Mỗi phòng tối đa 50 Quỷ Đỏ.</p>
+        <div id="roomList" class="room-list"></div><small id="roomHint" class="field-hint">Bạn cần chọn phòng trước khi
+          bấm vào hang.</small>
+      </div>
+      <div class="entry">
+        <div class="entry-title"><span class="entry-mark" aria-label="Biểu tượng Hang MU"><svg class="cave-logo"
+              viewBox="0 0 100 112" role="img" aria-label="Biểu tượng Hang MU">
+              <path class="logo-stone"
+                d="M9 91V48C9 25 27 8 50 8s41 17 41 40v43H76V49c0-14-11-25-26-25S24 35 24 49v42z" />
+              <path class="logo-flame"
+                d="M50 37c-2 12-15 17-15 31a15 15 0 0 0 30 0c0-8-5-14-9-19 0 8-4 11-6 12 2-10-2-17 0-24z" />
+              <path class="logo-base" d="M28 94h44v8H28z" />
+            </svg></span>
+          <div><b>ĐĂNG KÝ VÀO HANG</b><small>Tạo áo bóng đá riêng của bạn</small></div>
+        </div>
+        <label for="playerName">TÊN HIỂN THỊ</label><input id="playerName" type="text" maxlength="18"
+          placeholder="Ví dụ: Bắc Giang MU" autocomplete="nickname" lang="vi" spellcheck="false">
+        <small id="nameHint" class="field-hint">Cho phép tiếng Việt có dấu, tối đa 18 ký tự.</small>
+        <label for="jerseyNumber">SỐ ÁO TỰ ĐỘNG</label><input id="jerseyNumber" type="text"
+          value="Tự cấp 1–50 theo thứ tự vào phòng" readonly aria-readonly="true">
+        <small id="numberHint" class="field-hint">Máy chủ tự cấp số còn trống từ 1 đến 50 trong phòng bạn chọn.</small>
+        <button id="enterBtn">TẠO NHÂN VẬT & VÀO HANG <span>→</span></button><small class="privacy-note">Không cần tài
+          khoản, email hay mật khẩu. Tên tục tĩu sẽ bị từ chối.</small>
+      </div>
+    </div>
+  </div>
+  <div id="ritualModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-emblem" aria-label="Biểu tượng Hang MU"><svg class="cave-logo" viewBox="0 0 100 112" role="img"
+          aria-label="Biểu tượng Hang MU">
+          <path class="logo-stone" d="M9 91V48C9 25 27 8 50 8s41 17 41 40v43H76V49c0-14-11-25-26-25S24 35 24 49v42z" />
+          <path class="logo-flame"
+            d="M50 37c-2 12-15 17-15 31a15 15 0 0 0 30 0c0-8-5-14-9-19 0 8-4 11-6 12 2-10-2-17 0-24z" />
+          <path class="logo-base" d="M28 94h44v8H28z" />
+        </svg></div>
+      <h2>NGHI THỨC NHẬP HANG</h2>
+      <p>Trước khi gặp anh em trong hang, bạn hãy đến giữa thảm và cúi đầu trước biểu trưng Hang MU trong 5 giây nhé.
+      </p>
+      <div class="modal-actions"><button id="ritualNo" class="secondary">Không</button><button id="ritualYes"
+          class="primary">ĐỒNG Ý, VÀO HANG</button></div>
+    </div>
+  </div>
+  <div id="presenceModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-emblem">👀</div>
+      <h2>BẠN CÒN Ở ĐÂY KHÔNG?</h2>
+      <p>Hang MU đang chờ bạn xác nhận. Bạn có 60 giây để xác nhận. Nếu không phản hồi, hệ thống sẽ tự động đưa bạn rời
+        hang.</p>
+      <div class="modal-actions"><button id="stillHereBtn" class="primary">TÔI VẪN Ở ĐÂY</button></div><small
+        id="presenceCountdown">Còn 60 giây</small>
+    </div>
+  </div>
+  <main id="game" class="hidden">
+    <canvas id="world"></canvas>
+    <header class="hud">
+      <div class="brand"><span class="mini-crest" aria-label="Biểu tượng Hang MU"><svg class="cave-logo"
+            viewBox="0 0 100 112" role="img" aria-label="Biểu tượng Hang MU">
+            <path class="logo-stone"
+              d="M9 91V48C9 25 27 8 50 8s41 17 41 40v43H76V49c0-14-11-25-26-25S24 35 24 49v42z" />
+            <path class="logo-flame"
+              d="M50 37c-2 12-15 17-15 31a15 15 0 0 0 30 0c0-8-5-14-9-19 0 8-4 11-6 12 2-10-2-17 0-24z" />
+            <path class="logo-base" d="M28 94h44v8H28z" />
+          </svg></span>
+        <div><b>HANG MU</b><small id="roomLabel">Đang kết nối…</small></div>
+      </div>
+      <div class="online"><i></i><span id="onlineCount">1</span> / <span id="capacity">50</span></div><button
+        id="leaveBtn" class="leave">RỜI PHÒNG</button>
+    </header>
+    <div class="scene-tip">W A S D / ← ↑ → ↓: di chuyển · Click: chọn người chơi / vị trí · Space: nhảy · Q: cúi chào ·
+      E: cổ vũ · F: bình thường · G: quỳ dập đầu</div>
+    <div class="hang-event"><span id="hangMoodIcon">🥀</span><span><b id="hangMoodTitle">MU ĐANG TRONG TÌNH TRẠNG KHÁ
+          TỒI TỆ</b><small id="hangMoodText">Xin giữ bình tĩnh. Ban quản lý hang chưa có phát
+          ngôn.</small></span><button id="moodToggle" type="button">ĐỔI TÂM TRẠNG</button></div>
+
+    <div id="hangEventBanner" class="hang-event-banner hidden"></div>
+    <div class="control-panel">
+      <div class="move-pad"><button data-move="up" aria-label="Tiến">▲</button>
+        <div><button data-move="left" aria-label="Trái">◀</button><button data-move="down"
+            aria-label="Lùi">▼</button><button data-move="right" aria-label="Phải">▶</button></div>
+      </div>
+      <div class="actions"><button data-action="prostrate"><kbd>G</kbd> 🙏 Quỳ dập đầu</button><button
+          data-action="bow"><kbd>Q</kbd> 🙇 Cúi chào</button><button data-action="cheer"><kbd>E</kbd> 📣 HÔ CỔ
+          VŨ</button><button data-action="idle"><kbd>F</kbd> 🧍 Bình thường</button><button type="button"
+          id="spotHelp">◎ Chọn đĩa tròn để đứng</button></div>
+    </div>
+    <button type="button" id="chatToggle" class="chat-toggle" aria-expanded="false" aria-controls="chatPanel">💬 CHAT
+      HANG <span id="chatUnread" class="chat-unread hidden">0</span></button>
+    <section id="chatPanel" class="chat-panel hidden" aria-label="Chat trong hang">
+      <div class="chat-title"><span>CHAT TRONG HANG</span><small>1 tin / 5 giây</small><button type="button"
+          id="chatClose" class="chat-close" aria-label="Đóng chat">×</button></div>
+      <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+      <div class="quick-chat"><button type="button" data-phrase="Tôi không trốn, tôi đang phân tích chiến thuật!">Phân
+          tích chiến thuật</button><button type="button" data-phrase="Hẹn gặp lại khi MU thắng nhé!">Hẹn ngày ra
+          hang</button><button type="button" data-phrase="Hang hôm nay đông bất thường!">Đông bất thường</button><button
+          type="button" data-phrase="Tôi vào hang để bảo toàn danh dự Quỷ Đỏ!">Bảo toàn danh dự</button></div>
+      <form id="chatForm"><input id="chatInput" maxlength="180" placeholder="Gửi lời chào anh em…"
+          autocomplete="off"><button type="submit">GỬI</button></form>
+    </section>
+    <div id="carryMenu" class="carry-menu hidden" role="menu">
+      <span>Chọn tương tác</span>
+      <button type="button" id="carryInviteBtn">🎒 Mời cõng sau lưng</button>
+    </div>
+    <div id="carryInviteModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-emblem">🫂</div>
+        <h2>LỜI MỜI CÕNG</h2>
+        <p id="carryInviteText">Một người chơi muốn cõng bạn.</p>
+        <div class="modal-actions"><button type="button" id="carryDecline" class="secondary">TỪ CHỐI</button><button
+            type="button" id="carryAccept" class="primary">ĐỒNG Ý</button></div>
+      </div>
+    </div>
+    <div id="interactionInviteModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-emblem">🤝</div>
+        <h2>LỜI MỜI TƯƠNG TÁC</h2>
+        <p id="interactionInviteText">Một người chơi muốn tương tác với bạn.</p>
+        <div class="modal-actions"><button type="button" id="interactionDecline" class="secondary">TỪ
+            CHỐI</button><button type="button" id="interactionAccept" class="primary">ĐỒNG Ý</button></div>
+      </div>
+    </div>
+    <div id="carryRelease" class="carry-release hidden"><span>🫂 ĐANG CÕNG / ĐƯỢC CÕNG</span><button type="button"
+        id="carryReleaseBtn">THẢ XUỐNG</button></div>
+    <div id="seatPickerPanel" class="seat-picker hidden" role="dialog" aria-label="Chọn chỗ ngồi">
+      <div class="sp-header">
+        <span>🪑 CHỌN CHỖ ĐỨNG</span>
+        <button type="button" id="seatPickerClose" aria-label="Đóng">×</button>
+      </div>
+      <div class="sp-body"></div>
+    </div>
+    <div id="toast" class="toast"></div>
+  </main>
+  <script type="module" src="/client.js"></script>
+</body>
+
+</html>
