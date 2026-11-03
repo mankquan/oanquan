@@ -7,7 +7,7 @@ let isJumping = false, jumpVelocity = 0, jumpHeight = 0;
 const JUMP_POWER = 7, JUMP_GRAVITY = 18;
 const seatSpots = new Map(), raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
 let spotMaterials = null; const fireEffects = []; let bannerTimer = null;
-const players = new Map(), keys = {}, pressedMoves = new Set(); let lastSend = 0, moveAction = "idle", chatUnread = 0, selectedCarryTarget = null, carryInviteTimer = null, interactionInviteTimer = null, activeInteractions = new Map();
+const players = new Map(), keys = {}, pressedMoves = new Set(), joystickVector = { x: 0, z: 0 }; let lastSend = 0, moveAction = "idle", chatUnread = 0, selectedCarryTarget = null, carryInviteTimer = null, interactionInviteTimer = null, activeInteractions = new Map();
 function wsUrl() { return (location.protocol === "https:" ? "wss://" : "ws://") + location.host }
 function connect() { socket = new WebSocket(wsUrl()); socket.onmessage = e => handleMessage(JSON.parse(e.data)); socket.onclose = () => { if (!game.classList.contains("hidden")) toast("Mất kết nối máy chủ. Hãy tải lại trang để vào lại.") } }
 function send(data) { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)) }
@@ -279,7 +279,9 @@ function animate() {
             if (performance.now() - lastRitualSend > 120) { send({ type: 'ritual-progress', x: localPlayer.avatar.root.position.x, z: localPlayer.avatar.root.position.z, action: localPlayer.action }); lastRitualSend = performance.now(); }
         }
         let dx = 0, dz = 0; if (keys.KeyA || keys.ArrowLeft || pressedMoves.has("left")) dx--; if (keys.KeyD || keys.ArrowRight || pressedMoves.has("right")) dx++; if (keys.KeyW || keys.ArrowUp || pressedMoves.has("up")) dz--; if (keys.KeyS || keys.ArrowDown || pressedMoves.has("down")) dz++;
-        if (!ritualActive && !localPlayer.carriedBy && (dx || dz)) { if (localPlayer.action === "prostrate" || localPlayer.action === "bow" || localPlayer.action === "sit" || localPlayer.spotId) { localPlayer.action = "walk"; localPlayer.spotId = null; } const len = Math.hypot(dx, dz); dx /= len; dz /= len; const speed = 5; localPlayer.avatar.root.position.x = THREE.MathUtils.clamp(localPlayer.avatar.root.position.x + dx * dt * speed, -13, 13); localPlayer.avatar.root.position.z = THREE.MathUtils.clamp(localPlayer.avatar.root.position.z + dz * dt * speed, -9, 13); localPlayer.avatar.root.rotation.y = Math.atan2(dx, dz); if (localPlayer.action !== "cheer" && localPlayer.action !== "bow") localPlayer.action = "walk"; }
+        dx += joystickVector.x; dz += joystickVector.z;
+        const len = Math.hypot(dx, dz);
+        if (!ritualActive && !localPlayer.carriedBy && len > 0.08) { if (localPlayer.action === "prostrate" || localPlayer.action === "bow" || localPlayer.action === "sit" || localPlayer.spotId) { localPlayer.action = "walk"; localPlayer.spotId = null; } const dirX = dx / len, dirZ = dz / len; const speed = 5 * Math.min(1, Math.max(0.4, len)); localPlayer.avatar.root.position.x = THREE.MathUtils.clamp(localPlayer.avatar.root.position.x + dirX * dt * speed, -13, 13); localPlayer.avatar.root.position.z = THREE.MathUtils.clamp(localPlayer.avatar.root.position.z + dirZ * dt * speed, -9, 13); localPlayer.avatar.root.rotation.y = Math.atan2(dirX, dirZ); if (localPlayer.action !== "cheer" && localPlayer.action !== "bow") localPlayer.action = "walk"; }
         else if (!ritualActive && !localPlayer.carriedBy && localPlayer.action === "walk") localPlayer.action = "idle";
         const target = localPlayer.avatar.root.position; const desiredCameraPosition = new THREE.Vector3(target.x, 8, target.z + 17); camera.position.lerp(desiredCameraPosition, .12); camera.lookAt(target.x, target.y + 1.2, target.z - 7);
         if (!ritualActive && !localPlayer.carriedBy && localPlayer.action !== "sit" && performance.now() - lastSend > 90) { send({ type: "move", x: localPlayer.avatar.root.position.x, z: localPlayer.avatar.root.position.z, action: localPlayer.action }); lastSend = performance.now() }
@@ -289,42 +291,107 @@ function animate() {
     for (const passenger of players.values()) { if (!passenger.carriedBy) continue; const carrier = players.get(passenger.carriedBy); if (!carrier) continue; const offset = passenger.carryStyle === "bridal" ? new THREE.Vector3(.62, .72, .02) : new THREE.Vector3(0, 1.12, -.42); carrier.avatar.root.localToWorld(offset); passenger.avatar.root.position.copy(offset); passenger.avatar.root.rotation.y = carrier.avatar.root.rotation.y; passenger.avatar.root.rotation.z = passenger.carryStyle === "bridal" ? Math.PI / 2 : 0; }
     renderer.render(scene, camera);
 }
-// === AUDIO: iOS/Safari compatible cheer sound ===
+// === AUDIO ENGINE: Web Audio API (Primary) + HTML5 Audio (Fallback) ===
+let audioCtx = null;
+let cheerAudioBuffer = null;
+let cheerAudioSource = null;
 const cheerAudio = new Audio('/audio/1.mp3');
 cheerAudio.preload = 'auto';
-let _audioUnlocked = false;
-function _unlockAudio() {
-    if (_audioUnlocked) return;
-    _audioUnlocked = true;
-    // iOS Safari requires audio.play() called synchronously inside a user gesture.
-    // Do NOT call load() first — it resets state and can break the gesture unlock on some iOS versions.
-    const p = cheerAudio.play();
-    if (p && typeof p.catch === 'function') p.catch(() => {});
-    // Pause slightly after to not play the sound, but the unlock is already done.
-    setTimeout(() => { try { cheerAudio.pause(); cheerAudio.currentTime = 0; } catch (_) {} }, 150);
+
+function getAudioContext() {
+    if (!audioCtx) {
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtxClass) audioCtx = new AudioCtxClass();
+    }
+    return audioCtx;
 }
-document.addEventListener('touchstart', _unlockAudio, { once: true, passive: true });
-document.addEventListener('pointerdown', _unlockAudio, { once: true, passive: true });
+
+function loadCheerBuffer() {
+    const ctx = getAudioContext();
+    if (!ctx || cheerAudioBuffer) return;
+    fetch('/audio/1.mp3')
+        .then(r => r.arrayBuffer())
+        .then(buf => ctx.decodeAudioData(buf))
+        .then(decoded => {
+            cheerAudioBuffer = decoded;
+        })
+        .catch(() => {});
+}
+
+let _audioUnlocked = false;
+function unlockAudio() {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+    }
+    loadCheerBuffer();
+
+    if (!_audioUnlocked) {
+        _audioUnlocked = true;
+        try {
+            cheerAudio.muted = true;
+            const p = cheerAudio.play();
+            if (p && typeof p.then === 'function') {
+                p.then(() => {
+                    cheerAudio.pause();
+                    cheerAudio.currentTime = 0;
+                    cheerAudio.muted = false;
+                }).catch(() => { cheerAudio.muted = false; });
+            } else {
+                cheerAudio.pause();
+                cheerAudio.currentTime = 0;
+                cheerAudio.muted = false;
+            }
+        } catch (_) {
+            cheerAudio.muted = false;
+        }
+    }
+}
+
+['touchstart', 'touchend', 'pointerdown', 'pointerup', 'click'].forEach(evt => {
+    document.addEventListener(evt, unlockAudio, { passive: true });
+});
+
 function playCheerAudio() {
+    unlockAudio();
+    const ctx = getAudioContext();
+
+    // 1. Web Audio API (primary: instant, never blocked by iOS once context is running)
+    if (ctx && cheerAudioBuffer) {
+        try {
+            if (ctx.state === 'suspended') ctx.resume();
+            if (cheerAudioSource) {
+                try { cheerAudioSource.stop(); } catch(_) {}
+            }
+            const src = ctx.createBufferSource();
+            src.buffer = cheerAudioBuffer;
+            src.connect(ctx.destination);
+            src.start(0);
+            cheerAudioSource = src;
+            return;
+        } catch (_) {}
+    }
+
+    // 2. HTML5 Audio Element Fallback
     try {
         cheerAudio.pause();
         cheerAudio.currentTime = 0;
+        cheerAudio.muted = false;
         const result = cheerAudio.play();
         if (result && typeof result.catch === 'function') {
             result.catch(err => {
                 if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
-                    toast('Chạm màn hình một lần để kích hoạt âm thanh rồi thử lại.');
+                    toast('Chạm màn hình một lần để kích hoạt âm thanh.');
                 } else if (err && err.name === 'NotSupportedError') {
-                    toast('Định dạng audio không được hỗ trợ trên thiết bị này.');
+                    toast('Định dạng audio không được hỗ trợ.');
                 }
-                // Other errors: suppress silently
             });
         }
-    } catch (_) { /* suppress */ }
+    } catch (_) {}
 }
-function setAction(a) { if (!localPlayer || ritualActive || localPlayer.carriedBy) return; markActivity(); localPlayer.spotId = null; localPlayer.action = a; send({ type: "action", action: a }); if (a === "cheer") playCheerAudio(); toast(a === "cheer" ? "Bạn đang hô cổ vũ!" : a === "bow" ? "Bạn cúi chào!" : a === "prostrate" ? "Bạn quỳ dập đầu bái cờ MU!" : "Trạng thái: Bình thường") }
+function setAction(a) { if (!localPlayer || ritualActive || localPlayer.carriedBy) return; markActivity(); localPlayer.spotId = null; localPlayer.action = a; send({ type: "action", action: a }); if (a === "cheer") playCheerAudio(); toast(a === "cheer" ? "📣 Bạn đang hô cổ vũ! (Gạt nút chuông nếu iPhone im lặng)" : a === "bow" ? "🙇 Bạn cúi chào!" : a === "prostrate" ? "🙏 Bạn quỳ dập đầu bái cờ MU!" : "🧍 Trạng thái: Bình thường"); }
 addEventListener("keydown", e => { const typing = e.target instanceof HTMLElement && (["INPUT", "TEXTAREA"].includes(e.target.tagName) || e.target.isContentEditable); if (typing) return; keys[e.code] = true; if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault(); if (e.repeat) return; if (e.code === "Space") { if (localPlayer && !ritualActive && !localPlayer.carriedBy && !isJumping && !(["bow", "prostrate", "sit"].includes(localPlayer.action))) { isJumping = true; jumpVelocity = JUMP_POWER; localPlayer.action = "jump"; markActivity(); } return; } const binds = { KeyQ: "bow", KeyE: "cheer", KeyF: "idle", KeyG: "prostrate" }; if (binds[e.code]) setAction(binds[e.code]); }); addEventListener("keyup", e => keys[e.code] = false);
-function clearMovementInputs() { for (const code of Object.keys(keys)) keys[code] = false; pressedMoves.clear(); }
+function clearMovementInputs() { for (const code of Object.keys(keys)) keys[code] = false; pressedMoves.clear(); joystickVector.x = 0; joystickVector.z = 0; if (document.getElementById("joystickThumb")) document.getElementById("joystickThumb").style.transform = "translate(0px, 0px)"; }
 addEventListener("blur", clearMovementInputs); document.addEventListener("visibilitychange", () => { if (document.hidden) clearMovementInputs(); }); addEventListener("pointerup", clearMovementInputs); addEventListener("pointercancel", clearMovementInputs);
 document.querySelectorAll("[data-action]").forEach(b => {
     b.addEventListener("pointerdown", e => {
@@ -381,6 +448,102 @@ function _closeSeatPanel() {
 }
 $("#spotHelp")?.addEventListener("click", () => _seatPanelOpen ? _closeSeatPanel() : _openSeatPanel());
 document.getElementById('seatPickerClose')?.addEventListener('click', _closeSeatPanel);
+// === VIRTUAL JOYSTICK CONTROLLER ===
+const joystickZone = document.getElementById("joystickZone");
+const joystickBase = document.getElementById("joystickBase");
+const joystickThumb = document.getElementById("joystickThumb");
+let joystickTouchId = null;
+let joystickCenter = { x: 0, y: 0 };
+const JOYSTICK_MAX_RADIUS = 36;
+
+if (joystickZone && joystickThumb && joystickBase) {
+    function startJoystick(clientX, clientY, touchId) {
+        joystickTouchId = touchId;
+        const rect = joystickBase.getBoundingClientRect();
+        joystickCenter = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        };
+        updateJoystick(clientX, clientY);
+        unlockAudio();
+        markActivity();
+    }
+
+    function updateJoystick(clientX, clientY) {
+        const dx = clientX - joystickCenter.x;
+        const dy = clientY - joystickCenter.y;
+        const dist = Math.hypot(dx, dy);
+        const angle = Math.atan2(dy, dx);
+        const clampedDist = Math.min(dist, JOYSTICK_MAX_RADIUS);
+
+        const thumbX = Math.cos(angle) * clampedDist;
+        const thumbY = Math.sin(angle) * clampedDist;
+
+        joystickThumb.style.transform = `translate(${thumbX}px, ${thumbY}px)`;
+
+        if (dist < 4) {
+            joystickVector.x = 0;
+            joystickVector.z = 0;
+        } else {
+            const intensity = clampedDist / JOYSTICK_MAX_RADIUS;
+            joystickVector.x = Math.cos(angle) * intensity;
+            joystickVector.z = Math.sin(angle) * intensity;
+        }
+    }
+
+    function resetJoystick() {
+        joystickTouchId = null;
+        joystickThumb.style.transform = "translate(0px, 0px)";
+        joystickVector.x = 0;
+        joystickVector.z = 0;
+    }
+
+    joystickZone.addEventListener("touchstart", e => {
+        e.preventDefault();
+        if (joystickTouchId !== null) return;
+        const t = e.changedTouches[0];
+        startJoystick(t.clientX, t.clientY, t.identifier);
+    }, { passive: false });
+
+    window.addEventListener("touchmove", e => {
+        if (joystickTouchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (t.identifier === joystickTouchId) {
+                e.preventDefault();
+                updateJoystick(t.clientX, t.clientY);
+                break;
+            }
+        }
+    }, { passive: false });
+
+    const stopTouch = e => {
+        if (joystickTouchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickTouchId) {
+                resetJoystick();
+                break;
+            }
+        }
+    };
+    window.addEventListener("touchend", stopTouch, { passive: true });
+    window.addEventListener("touchcancel", stopTouch, { passive: true });
+
+    // Pointer support for mouse dragging on desktop
+    joystickZone.addEventListener("pointerdown", e => {
+        if (e.pointerType === "touch") return;
+        e.preventDefault();
+        startJoystick(e.clientX, e.clientY, "mouse");
+        const onPointerMove = ev => updateJoystick(ev.clientX, ev.clientY);
+        const onPointerUp = () => {
+            resetJoystick();
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerUp);
+        };
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp);
+    });
+}
 document.querySelectorAll("[data-move]").forEach(b => { const k = b.dataset.move; const on = () => pressedMoves.add(k), off = () => pressedMoves.delete(k); b.addEventListener("pointerdown", e => { e.preventDefault(); on(); b.setPointerCapture(e.pointerId) }); b.addEventListener("pointerup", off); b.addEventListener("pointercancel", off); b.addEventListener("lostpointercapture", off); window.addEventListener("pointerup", off); window.addEventListener("pointercancel", off) });
 const bannedNames = ["địt", "đụ", "đéo", "lồn", "cặc", "buồi", "đmm", "dmm", "vcl", "fuck", "shit", "bitch"];
 function cleanName(v) { return v.normalize("NFC").replace(/[<>\{}\[\]$%`]/g, "").replace(/\s+/g, " ").trim().slice(0, 18) }

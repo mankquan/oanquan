@@ -211,6 +211,79 @@
     }
 }
 
+/* === VIRTUAL JOYSTICK FOR MOBILE === */
+.joystick-zone {
+    display: none;
+    width: 120px;
+    height: 120px;
+    position: relative;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: auto;
+}
+.joystick-base {
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(168, 14, 22, 0.3) 0%, rgba(26, 12, 10, 0.8) 100%);
+    border: 2px solid rgba(240, 190, 105, 0.6);
+    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8), 0 4px 16px rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.joystick-base::before {
+    content: "▲";
+    position: absolute;
+    top: 5px;
+    font-size: 8px;
+    color: rgba(240, 190, 105, 0.5);
+}
+.joystick-base::after {
+    content: "▼";
+    position: absolute;
+    bottom: 5px;
+    font-size: 8px;
+    color: rgba(240, 190, 105, 0.5);
+}
+.joystick-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #f6d47d 0%, #b8141e 55%, #5a0c12 100%);
+    border: 2.5px solid #ffe29a;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75), 0 0 10px rgba(245, 198, 91, 0.45);
+    position: relative;
+    will-change: transform;
+    pointer-events: none;
+    transition: transform 0.04s ease-out;
+}
+.joystick-thumb::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffe29a;
+    box-shadow: 0 0 6px #fff;
+}
+
+/* On touch/mobile: switch move-pad to Joystick */
+@media (max-width: 768px), (pointer: coarse) {
+    .move-pad {
+        display: none !important;
+    }
+    .joystick-zone {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
 /* === MOBILE UI IMPROVEMENTS v2 === */
 /* Canvas: remove 300ms tap delay, prevent unwanted pinch/pan */
 #world { touch-action: none; }
@@ -220,7 +293,7 @@
     .actions {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        max-width: 220px;
+        max-width: 215px;
         gap: 5px;
     }
     .actions button {
@@ -235,18 +308,11 @@
     .actions button kbd {
         display: none;
     }
-    /* ── Move pad: larger, easier to hold ── */
-    .move-pad button {
-        min-width: 48px;
-        min-height: 48px;
-        font-size: 18px;
-        padding: 8px;
-    }
     /* ── Control panel: sit cleanly above safe area ── */
     .control-panel {
         bottom: max(12px, env(safe-area-inset-bottom));
-        padding: 0 10px;
-        gap: 10px;
+        padding: 0 8px;
+        gap: 8px;
         align-items: flex-end;
     }
     /* ── Scene tip: hidden to free up screen space ── */
@@ -301,19 +367,22 @@
 }
 
 @media (max-width: 380px) {
+    .joystick-zone {
+        width: 105px;
+        height: 105px;
+    }
+    .joystick-thumb {
+        width: 42px;
+        height: 42px;
+    }
     .actions {
-        max-width: 192px;
+        max-width: 185px;
         gap: 4px;
     }
     .actions button {
         min-height: 42px;
-        padding: 7px 5px;
+        padding: 7px 4px;
         font-size: 9px;
-    }
-    .move-pad button {
-        min-width: 43px;
-        min-height: 43px;
-        font-size: 16px;
     }
     .chat-toggle {
         bottom: max(168px, calc(env(safe-area-inset-bottom) + 168px));

@@ -1,5 +1,6 @@
 const express=require('express');
 const http=require('http');
+const path=require('path');
 const WebSocket=require('ws');
 const crypto=require('crypto');
 const PORT=process.env.PORT||3000;
@@ -8,7 +9,18 @@ const MAX_ROOMS=4;
 const IDLE_PROMPT_MS=120000;
 const IDLE_GRACE_MS=60000;
 const CHAT_COOLDOWN_MS=5000;
-const app=express();app.use(express.static('public'));
+const app=express();
+app.get('/audio/1.mp3',(req,res)=>{
+  res.sendFile(path.join(__dirname,'public/audio/1.mp3'),{
+    headers:{'Content-Type':'audio/mpeg','Accept-Ranges':'bytes','Cache-Control':'public, max-age=3600'}
+  });
+});
+app.get('/audio/1.m4a',(req,res)=>{
+  res.sendFile(path.join(__dirname,'public/audio/1.m4a'),{
+    headers:{'Content-Type':'audio/mp4','Accept-Ranges':'bytes','Cache-Control':'public, max-age=3600'}
+  });
+});
+app.use(express.static('public'));
 const server=http.createServer(app);
 const wss=new WebSocket.Server({server,maxPayload:2048});
 const rooms=new Map(),clients=new Map(),playerStats=new Map(),cheerWindows=new Map();let hangMode='gloomy';
