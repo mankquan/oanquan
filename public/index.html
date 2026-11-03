@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#170b0a">
   <title>HANG MU ONLINE</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=21.4">
 </head>
 
 <body>
@@ -25,6 +25,10 @@
         vững tinh thần!</p>
       <div class="hang-meme"><span class="meme-dot"></span><b>CHẾ ĐỘ HANG:</b> “Tôi không trốn, tôi đang phân tích tình
         hình!”</div>
+      <div id="matchNoticeBar" class="match-notice" role="button" tabindex="0" title="Bấm để xem pop-up chi tiết">
+        <span class="match-dot"></span>
+        <b>LỊCH THI ĐẤU QUỶ ĐỎ:</b> 03:00 Sáng ngày 04/11/2026 · <strong>Manchester United vs AS Roma</strong> (Cúp Châu Âu). <span class="click-more">👉 Bấm xem pop-up</span>
+      </div>
       <div class="room-preview">
         <div class="room-preview-head"><b>CHỌN PHÒNG MUỐN VÀO</b><span id="roomTotal">Đang tải…</span></div>
         <p class="room-instruction">Chọn một trong 4 hang. Mỗi phòng tối đa 50 Quỷ Đỏ.</p>
@@ -53,6 +57,27 @@
       </div>
     </div>
   </div>
+  <!-- POP-UP THÔNG BÁO LỊCH THI ĐẤU MU VS ROMA -->
+  <div id="matchModal" class="modal" role="dialog" aria-modal="true" style="display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;">
+    <div class="modal-card match-modal-card" style="width:min(520px,94vw);max-height:calc(100vh - 24px);overflow-y:auto;box-sizing:border-box;margin:auto;">
+      <button type="button" id="matchModalClose" class="match-close-btn" aria-label="Đóng thông báo">×</button>
+      <div class="match-popup-badge">🔥 THÔNG BÁO LỊCH ĐẤU HANG MU 🔥</div>
+      <h2 class="match-popup-title">MANCHESTER UNITED <span class="vs-tag">VS</span> AS ROMA</h2>
+      <div class="match-popup-time">
+        ⏰ <b>03:00 SÁNG</b> · NGÀY <b>04/11/2026</b>
+      </div>
+      <div class="match-popup-banner" style="width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;border-radius:12px;background:#fff;border:2px solid #d4a34d;margin:10px 0;">
+        <img src="/thong-bao-mu-roma.png?v=21.4" alt="Lịch thi đấu Manchester United vs AS Roma lúc 3 giờ sáng ngày 04/11/2026" style="width:100%;max-width:100%;height:auto;display:block;margin:0 auto;box-sizing:border-box;border-radius:10px;">
+      </div>
+      <div class="match-popup-desc">
+        <p>🏆 <b>Giải đấu:</b> Bóng đá Vô địch các Câu lạc bộ Châu Âu</p>
+        <p>🔴 <b>Thông báo:</b> Anh em Quỷ Đỏ tập trung tại <b>Hang MU Online</b> lúc <b>3:00 sáng ngày 04/11/2026</b> để cùng nhau xem bóng, cổ vũ hết mình và giữ vững tinh thần!</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="matchModalOk" class="primary match-btn-ok">🔴 ĐÃ RÕ, CÙNG VÀO HANG CỔ VŨ! 🔴</button>
+      </div>
+    </div>
+  </div>
   <div id="ritualModal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-emblem" aria-label="Biểu tượng Hang MU"><svg class="cave-logo" viewBox="0 0 100 112" role="img"
@@ -69,7 +94,7 @@
           class="primary">ĐỒNG Ý, VÀO HANG</button></div>
     </div>
   </div>
-  <div id="presenceModal" class="modal hidden" role="dialog" aria-modal="true">
+  <div id="presenceModal" class="modal hidden" role="dialog" aria-modal="true" style="display:none !important;">
     <div class="modal-card">
       <div class="modal-emblem">👀</div>
       <h2>BẠN CÒN Ở ĐÂY KHÔNG?</h2>
@@ -93,6 +118,7 @@
         <div><b>HANG MU</b><small id="roomLabel">Đang kết nối…</small></div>
       </div>
       <div class="online"><i></i><span id="onlineCount">1</span> / <span id="capacity">50</span></div><button
+        id="hudMatchNoticeBtn" class="hud-match-btn" type="button" title="Xem lịch thi đấu 04/11">📢 Lịch đấu 04/11</button><button
         id="leaveBtn" class="leave">RỜI PHÒNG</button>
     </header>
     <div class="scene-tip">W A S D / ← ↑ → ↓: di chuyển · Click: chọn người chơi / vị trí · Space: nhảy · Q: cúi chào ·
@@ -163,7 +189,6 @@
     </div>
     <div id="toast" class="toast"></div>
   </main>
-  <script type="module" src="/client.js"></script>
+  <script type="module" src="/client.js?v=21.5"></script>
 </body>
-
 </html>

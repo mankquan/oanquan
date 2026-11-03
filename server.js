@@ -6,8 +6,7 @@ const crypto=require('crypto');
 const PORT=process.env.PORT||3000;
 const ROOM_CAPACITY=Math.max(2,Math.min(50,Number(process.env.ROOM_CAPACITY||50)));
 const MAX_ROOMS=4;
-const IDLE_PROMPT_MS=120000;
-const IDLE_GRACE_MS=60000;
+const IDLE_TIMEOUT_MS=15*60*1000;
 const CHAT_COOLDOWN_MS=5000;
 const app=express();
 app.get('/audio/1.mp3',(req,res)=>{
@@ -119,5 +118,5 @@ wss.on('connection',ws=>{
  });
  ws.on('close',()=>removePlayer(ws));ws.on('error',()=>removePlayer(ws));
 });
-setInterval(()=>{const now=Date.now();for(const [ws,s] of clients){const r=rooms.get(s.roomId),p=r?.players.get(s.id);if(!p)continue;if(p.pendingInteraction&&now-p.pendingInteraction.at>15000){const pending=p.pendingInteraction;p.pendingInteraction=null;const other=r.players.get(pending.targetId||pending.fromId);if(other)other.pendingInteraction=null;}if(p.pendingCarryFrom&&now-p.pendingCarryFrom.at>15000)p.pendingCarryFrom=null;if(!p.presencePromptAt&&now-p.lastActivity>IDLE_PROMPT_MS){p.presencePromptAt=now;send(ws,{type:'presence-check',graceMs:IDLE_GRACE_MS});}else if(p.presencePromptAt&&now-p.presencePromptAt>IDLE_GRACE_MS){removePlayer(ws,'inactive');closeFor(ws,4001,'inactive');}}},1000).unref();
+setInterval(()=>{const now=Date.now();for(const [ws,s] of clients){const r=rooms.get(s.roomId),p=r?.players.get(s.id);if(!p)continue;if(p.pendingInteraction&&now-p.pendingInteraction.at>15000){const pending=p.pendingInteraction;p.pendingInteraction=null;const other=r.players.get(pending.targetId||pending.fromId);if(other)other.pendingInteraction=null;}if(p.pendingCarryFrom&&now-p.pendingCarryFrom.at>15000)p.pendingCarryFrom=null;if(now-p.lastActivity>IDLE_TIMEOUT_MS){removePlayer(ws,'inactive');closeFor(ws,4001,'Bạn đã rời hang do không hoạt động trong 15 phút.');}}},1000).unref();
 server.listen(PORT,()=>console.log(`Hang MU running on ${PORT}; ${MAX_ROOMS} rooms x ${ROOM_CAPACITY} players`));

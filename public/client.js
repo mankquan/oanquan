@@ -11,13 +11,12 @@ const players = new Map(), keys = {}, pressedMoves = new Set(), joystickVector =
 function wsUrl() { return (location.protocol === "https:" ? "wss://" : "ws://") + location.host }
 function connect() { socket = new WebSocket(wsUrl()); socket.onmessage = e => handleMessage(JSON.parse(e.data)); socket.onclose = () => { if (!game.classList.contains("hidden")) toast("Mất kết nối máy chủ. Hãy tải lại trang để vào lại.") } }
 function send(data) { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)) }
-function markActivity() { lastActivity = Date.now(); if (!$('#presenceModal').classList.contains('hidden')) dismissPresence(); }
-function dismissPresence() { clearInterval(presenceTimer); $('#presenceModal').classList.add('hidden'); send({ type: 'still-here' }); lastActivity = Date.now(); }
-function showPresence(graceMs = 60000) { if (!localPlayer || ritualActive || !$('#presenceModal').classList.contains('hidden')) return; $('#presenceModal').classList.remove('hidden'); presenceDeadline = Date.now() + graceMs; $('#presenceCountdown').textContent = 'Còn 60 giây'; presenceTimer = setInterval(() => { const left = Math.max(0, Math.ceil((presenceDeadline - Date.now()) / 1000)); $('#presenceCountdown').textContent = `Còn ${left} giây`; if (!left) { clearInterval(presenceTimer); send({ type: 'inactive' }); location.reload(); } }, 250); }
+function markActivity() { lastActivity = Date.now(); }
+function dismissPresence() {}
+function showPresence() {}
 function addChatLine(name, number, text) { const box = $('#chatMessages'); const line = document.createElement('div'); line.className = 'chat-line'; const b = document.createElement('b'); b.textContent = name; const n = document.createElement('span'); n.className = 'jersey'; n.textContent = ` (${number})`; const t = document.createTextNode(`: ${text}`); line.append(b, n, t); box.append(line); while (box.children.length > 40) box.firstChild.remove(); box.scrollTop = box.scrollHeight; if ($('#chatPanel').classList.contains('hidden')) { chatUnread++; $('#chatUnread').textContent = chatUnread; $('#chatUnread').classList.remove('hidden'); } }
 function handleMessage(m) {
     if (m.type === "room-list") renderRooms(m.rooms);
-    if (m.type === 'presence-check') showPresence(m.graceMs || 60000);
     if (m.type === "join-error") { toast(m.message || "Tên hiển thị không hợp lệ."); $("#nameHint").textContent = m.message || "Hãy chọn tên khác."; $("#nameHint").classList.add("invalid"); }
     if (m.type === "joined") {
         myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.players.length;
@@ -192,7 +191,20 @@ function init3D() {
     fc.fillStyle = "#8f1018"; fc.beginPath(); fc.moveTo(512, 205); fc.bezierCurveTo(475, 250, 490, 280, 512, 300); fc.bezierCurveTo(540, 270, 552, 242, 512, 205); fc.fill();
     fc.fillStyle = "#f4d58d"; fc.font = "bold 42px Georgia"; fc.fillText("CAVE COMMUNITY", 512, 450);
     const flagTex = new THREE.CanvasTexture(flagCanvas); flagTex.colorSpace = THREE.SRGBColorSpace;
-    const floorFlag = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), new THREE.MeshStandardMaterial({ map: flagTex, roughness: .9, side: THREE.DoubleSide })); floorFlag.rotation.x = -Math.PI / 2; floorFlag.position.set(0, .035, -1.5); scene.add(floorFlag);
+    const floorFlagMaterial = new THREE.MeshStandardMaterial({ map: flagTex, roughness: .9, side: THREE.DoubleSide });
+    const floorFlag = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), floorFlagMaterial); floorFlag.rotation.x = -Math.PI / 2; floorFlag.position.set(0, .035, -1.5); scene.add(floorFlag);
+    const customFloorTexture = new THREE.TextureLoader().load("/2.jpg?v=21.4", tex => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        floorFlagMaterial.map = tex;
+        floorFlagMaterial.needsUpdate = true;
+        if (tex.image && tex.image.width && tex.image.height) {
+            const aspect = tex.image.width / tex.image.height;
+            const w = aspect >= 1 ? 8 : 8 * aspect;
+            const h = aspect >= 1 ? 8 / aspect : 8;
+            floorFlag.geometry.dispose();
+            floorFlag.geometry = new THREE.PlaneGeometry(w, h);
+        }
+    }, undefined, () => console.info("Chưa có public/2.jpg; đang dùng biểu trưng mặc định cho thảm sàn."));
     // 50 vị trí đứng tĩnh tâm: chỉ là đĩa tròn thấp trên nền, tuyệt đối không tạo hình ghế.
     // Chia đều hai bên (25 vị trí mỗi bên), chừa lối giữa rộng cho thảm nghi lễ.
     spotMaterials = { free: mat(0xb52a20), rim: mat(0xf0bd58), taken: mat(0x4c4035) };
@@ -566,5 +578,30 @@ $("#chatClose").addEventListener("click", closeChat);
 $("#chatForm").addEventListener("submit", e => { e.preventDefault(); const input = $("#chatInput"), text = input.value.trim(); if (!text) return; send({ type: "chat", text }); input.value = ""; markActivity(); input.focus() });
 $("#chatInput").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeChat(); } }); $("#chatInput").addEventListener('input', () => { if (localPlayer) send({ type: 'activity' }); });
 addEventListener('pointerdown', () => { markActivity(); if (localPlayer) send({ type: 'activity' }); }, { passive: true }); addEventListener('keydown', e => { if (e.isComposing || e.keyCode === 229) return; markActivity(); if (localPlayer) send({ type: 'activity' }); }); addEventListener('touchstart', () => { markActivity(); if (localPlayer) send({ type: 'activity' }); }, { passive: true });
-setInterval(() => { if (localPlayer && $('#presenceModal').classList.contains('hidden')) send({ type: 'heartbeat' }); }, 15000);
+// === MATCH ANNOUNCEMENT POP-UP MODAL ===
+const matchModal = document.getElementById("matchModal");
+const matchModalClose = document.getElementById("matchModalClose");
+const matchModalOk = document.getElementById("matchModalOk");
+const matchNoticeBar = document.getElementById("matchNoticeBar");
+const hudMatchNoticeBtn = document.getElementById("hudMatchNoticeBtn");
+
+function openMatchModal() {
+    if (matchModal) matchModal.classList.remove("hidden");
+    markActivity();
+}
+function closeMatchModal() {
+    if (matchModal) matchModal.classList.add("hidden");
+    markActivity();
+}
+
+matchModalClose?.addEventListener("click", closeMatchModal);
+matchModalOk?.addEventListener("click", closeMatchModal);
+matchNoticeBar?.addEventListener("click", openMatchModal);
+hudMatchNoticeBtn?.addEventListener("click", openMatchModal);
+
+matchModal?.addEventListener("click", e => {
+    if (e.target === matchModal) closeMatchModal();
+});
+
+setInterval(() => { if (localPlayer) send({ type: 'heartbeat' }); }, 15000);
 connect();
