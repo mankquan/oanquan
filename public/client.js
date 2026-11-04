@@ -421,8 +421,8 @@ function animate() {
             if (p.action === "walk" && moveDist > 0.05) {
                 const targetRot = Math.atan2(moveX, moveZ);
                 a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, targetRot, 10, dt);
-            } else if (p.action === "prostrate") {
-                // Khi quỳ bái cờ, xoay mặt thẳng về phía cờ thiêng (hướng -Z)
+            } else if (p.action === "prostrate" || p.action === "bow") {
+                // Khi quỳ bái hoặc cúi chào cờ thiêng, xoay mặt thẳng về phía cờ thiêng (hướng -Z)
                 a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, Math.PI, 10, dt);
             }
         }
