@@ -19,11 +19,12 @@ function handleMessage(m) {
     if (m.type === "room-list") renderRooms(m.rooms);
     if (m.type === "join-error") { toast(m.message || "Tên hiển thị không hợp lệ."); $("#nameHint").textContent = m.message || "Hãy chọn tên khác."; $("#nameHint").classList.add("invalid"); }
     if (m.type === "joined") {
-        myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.players.length;
+        myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.realCount !== undefined ? m.realCount : m.players.filter(p => !p.isAfk).length;
         landing.classList.add("hidden"); game.classList.remove("hidden"); init3D(); for (const p of m.players) addPlayer(p, p.id === myId); if (localPlayer) { ritualActive = true; ritualStart = performance.now(); localPlayer.avatar.root.position.set(0, 0, 10); localPlayer.target.set(0, 0, 10); localPlayer.avatar.root.rotation.y = Math.PI; localPlayer.action = "walk"; if (localPlayer.carryingId || localPlayer.carriedBy) showCarryRelease(true); toast("Đang tiến đến thảm làm nghi thức nhập hang…"); }
+        startBackgroundMusic();
     }
-    if (m.type === "player-joined") { addPlayer(m.player, false); updateCount(1) }
-    if (m.type === "player-left") { removePlayer(m.id); updateCount(-1); _rebuildSeatPanelIfOpen(); }
+    if (m.type === "player-joined") { addPlayer(m.player, false); if (!m.player.isAfk) updateCount(1); }
+    if (m.type === "player-left") { removePlayer(m.id); if (!m.isAfk) updateCount(-1); _rebuildSeatPanelIfOpen(); }
     if (m.type === "player-updated") { const p = players.get(m.player.id); if (p) { const wasCheering = p.action === "cheer"; p.target.set(m.player.x, 0, m.player.z); if (p === localPlayer && m.player.spotId) p.avatar.root.position.set(m.player.x, 0, m.player.z); p.action = m.player.action; p.spotId = m.player.spotId || null; p.carryingId = m.player.carryingId || null; p.carriedBy = m.player.carriedBy || null; if (p === localPlayer && p.spotId && p.action === "cheer" && !wasCheering) playCheerAudio(); } _rebuildSeatPanelIfOpen(); }
     if (m.type === "carry-invite") { showCarryInvite(m.from); }
     if (m.type === "carry-pending") toast(`Đã gửi lời mời cõng ${m.targetName}.`);
@@ -118,7 +119,7 @@ function makeAvatar(name, number) {
     const nameSprite = textSprite(name.slice(0, 18), { size: 54, width: 1.55, height: .38, color: "#ffffff" }); nameSprite.position.y = 2.42; root.add(nameSprite); const titleSprite = textSprite('Fan nửa mùa', { size: 34, width: 1.5, height: .28, color: '#ffd58a' }); titleSprite.position.y = 2.12; root.add(titleSprite);
     return { root, bodyRig, arms: sleeves, legs: legPivots, headGroup, nameSprite, titleSprite, jerseyPrint };
 }
-function addPlayer(p, isLocal) { if (players.has(p.id)) return; const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7); avatar.root.position.set(p.x, 0, p.z); avatar.root.rotation.y = Math.PI; avatar.root.traverse(o => { o.userData.playerId = p.id }); scene.add(avatar.root); const entry = { id: p.id, name: p.name, jerseyNumber: p.jerseyNumber, joinedAt: p.joinedAt || Date.now(), strongFanAt: p.strongFanAt || 1050000, avatar, target: new THREE.Vector3(p.x, 0, p.z), action: p.action || "idle", spotId: p.spotId || null, carryingId: p.carryingId || null, carriedBy: p.carriedBy || null, phase: Math.random() * 6 }; players.set(p.id, entry); if (isLocal) localPlayer = entry }
+function addPlayer(p, isLocal) { if (players.has(p.id)) return; const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7); avatar.root.position.set(p.x, 0, p.z); avatar.root.rotation.y = Math.PI; avatar.root.traverse(o => { o.userData.playerId = p.id }); scene.add(avatar.root); const entry = { id: p.id, name: p.name, jerseyNumber: p.jerseyNumber, isAfk: !!p.isAfk, joinedAt: p.joinedAt || Date.now(), strongFanAt: p.strongFanAt || 1050000, avatar, target: new THREE.Vector3(p.x, 0, p.z), action: p.action || "idle", spotId: p.spotId || null, carryingId: p.carryingId || null, carriedBy: p.carriedBy || null, phase: Math.random() * 6 }; players.set(p.id, entry); if (isLocal) localPlayer = entry }
 function removePlayer(id) { const p = players.get(id); if (p) { scene.remove(p.avatar.root); players.delete(id) } }
 function mat(color, roughness = 1) { return new THREE.MeshStandardMaterial({ color, roughness }) }
 function createFlame(position, scale = 1) {
@@ -243,7 +244,20 @@ function onSpotPointer(event) {
     // event.button: 0 = left click / touch; -1 can appear on some pointer events. Allow both.
     if (event.button !== undefined && event.button !== 0 && event.button !== -1) return; const rect = renderer.domElement.getBoundingClientRect(); pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1; pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1; raycaster.setFromCamera(pointer, camera);
     const avatarRoots = [...players.values()].filter(p => p !== localPlayer).map(p => p.avatar.root); const playerHits = raycaster.intersectObjects(avatarRoots, true);
-    if (playerHits.length) { let obj = playerHits[0].object; while (obj && !obj.userData.playerId) obj = obj.parent; const target = obj && players.get(obj.userData.playerId); if (target) { markActivity(); showCarryMenu(target, event.clientX, event.clientY); return; } }
+    if (playerHits.length) {
+        let obj = playerHits[0].object;
+        while (obj && !obj.userData.playerId) obj = obj.parent;
+        const target = obj && players.get(obj.userData.playerId);
+        if (target) {
+            if (target.isAfk) {
+                toast(`“${target.name}” đang tĩnh tâm trong hang!`);
+                return;
+            }
+            markActivity();
+            showCarryMenu(target, event.clientX, event.clientY);
+            return;
+        }
+    }
     hideCarryMenu(); const hits = raycaster.intersectObjects([...seatSpots.values()], false); if (!hits.length) return; const spotId = hits[0].object.userData.spotId; markActivity(); send({ type: "spot", spotId });
 }
 function showCarryMenu(target, x, y) { selectedCarryTarget = target; const menu = $("#carryMenu"); menu.querySelector("span").textContent = `Tương tác với ${target.name} (#${target.jerseyNumber})`; menu.style.left = `${Math.min(x, innerWidth - 205)}px`; menu.style.top = `${Math.min(y, innerHeight - 230)}px`; menu.classList.remove("hidden"); }
@@ -303,12 +317,20 @@ function animate() {
     for (const passenger of players.values()) { if (!passenger.carriedBy) continue; const carrier = players.get(passenger.carriedBy); if (!carrier) continue; const offset = passenger.carryStyle === "bridal" ? new THREE.Vector3(.62, .72, .02) : new THREE.Vector3(0, 1.12, -.42); carrier.avatar.root.localToWorld(offset); passenger.avatar.root.position.copy(offset); passenger.avatar.root.rotation.y = carrier.avatar.root.rotation.y; passenger.avatar.root.rotation.z = passenger.carryStyle === "bridal" ? Math.PI / 2 : 0; }
     renderer.render(scene, camera);
 }
-// === AUDIO ENGINE: Web Audio API (Primary) + HTML5 Audio (Fallback) ===
+// === AUDIO ENGINE HANG MU V21: NHẠC NỀN (1.mp3/1.m4a) & HÔ CỔ VŨ (2.mp3/2.m4a) CÓ DUCKING ===
+const isAppleDevice = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) && !window.MSStream;
+const BG_MUSIC_SRC = isAppleDevice ? '/audio/1.m4a' : '/audio/1.mp3';
+const CHEER_MUSIC_SRC = isAppleDevice ? '/audio/2.m4a' : '/audio/2.mp3';
+
+const NORMAL_BG_VOLUME = 0.45;
+const DUCKED_BG_VOLUME = 0.10;
+
 let audioCtx = null;
 let cheerAudioBuffer = null;
-let cheerAudioSource = null;
-const cheerAudio = new Audio('/audio/1.mp3');
-cheerAudio.preload = 'auto';
+let bgAudio = null;
+let cheerAudio = null;
+let isAudioMuted = false;
+let duckTimer = null;
 
 function getAudioContext() {
     if (!audioCtx) {
@@ -321,13 +343,86 @@ function getAudioContext() {
 function loadCheerBuffer() {
     const ctx = getAudioContext();
     if (!ctx || cheerAudioBuffer) return;
-    fetch('/audio/1.mp3')
-        .then(r => r.arrayBuffer())
-        .then(buf => ctx.decodeAudioData(buf))
-        .then(decoded => {
-            cheerAudioBuffer = decoded;
+    fetch(CHEER_MUSIC_SRC)
+        .then(r => {
+            if (!r.ok) throw new Error("HTTP error " + r.status);
+            return r.arrayBuffer();
         })
-        .catch(() => {});
+        .then(buf => ctx.decodeAudioData(buf))
+        .then(decoded => { cheerAudioBuffer = decoded; })
+        .catch(() => {
+            fetch('/audio/2.mp3')
+                .then(r => r.arrayBuffer())
+                .then(buf => ctx.decodeAudioData(buf))
+                .then(decoded => { cheerAudioBuffer = decoded; })
+                .catch(() => {});
+        });
+}
+
+function initAudioElements() {
+    if (!bgAudio) {
+        bgAudio = new Audio(BG_MUSIC_SRC);
+        bgAudio.loop = true;
+        bgAudio.volume = isAudioMuted ? 0 : NORMAL_BG_VOLUME;
+        bgAudio.preload = 'auto';
+        bgAudio.addEventListener('error', () => {
+            if (bgAudio.src.endsWith('.m4a') || bgAudio.src.includes('1.m4a')) {
+                bgAudio.src = '/audio/1.mp3';
+                bgAudio.load();
+                if (!landing.classList.contains('hidden') || !game.classList.contains('hidden')) {
+                    if (!isAudioMuted) bgAudio.play().catch(() => {});
+                }
+            }
+        });
+    }
+    if (!cheerAudio) {
+        cheerAudio = new Audio(CHEER_MUSIC_SRC);
+        cheerAudio.volume = isAudioMuted ? 0 : 1.0;
+        cheerAudio.preload = 'auto';
+        cheerAudio.addEventListener('error', () => {
+            if (cheerAudio.src.endsWith('.m4a') || cheerAudio.src.includes('2.m4a')) {
+                cheerAudio.src = '/audio/2.mp3';
+                cheerAudio.load();
+            }
+        });
+    }
+}
+
+function startBackgroundMusic() {
+    initAudioElements();
+    if (isAudioMuted) return;
+    if (bgAudio && bgAudio.paused) {
+        bgAudio.play().catch(() => {});
+    }
+}
+
+function stopBackgroundMusic() {
+    if (bgAudio) {
+        bgAudio.pause();
+        bgAudio.currentTime = 0;
+    }
+    if (cheerAudio) {
+        cheerAudio.pause();
+        cheerAudio.currentTime = 0;
+    }
+}
+
+function duckBackgroundMusic(targetVol, durationMs = 200) {
+    if (!bgAudio || isAudioMuted) return;
+    clearInterval(duckTimer);
+    const startVol = bgAudio.volume;
+    const diff = targetVol - startVol;
+    const steps = 10;
+    const stepTime = durationMs / steps;
+    let step = 0;
+    duckTimer = setInterval(() => {
+        step++;
+        bgAudio.volume = Math.max(0, Math.min(1, startVol + diff * (step / steps)));
+        if (step >= steps) {
+            clearInterval(duckTimer);
+            bgAudio.volume = targetVol;
+        }
+    }, stepTime);
 }
 
 let _audioUnlocked = false;
@@ -336,27 +431,12 @@ function unlockAudio() {
     if (ctx && ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
     }
+    initAudioElements();
     loadCheerBuffer();
 
     if (!_audioUnlocked) {
         _audioUnlocked = true;
-        try {
-            cheerAudio.muted = true;
-            const p = cheerAudio.play();
-            if (p && typeof p.then === 'function') {
-                p.then(() => {
-                    cheerAudio.pause();
-                    cheerAudio.currentTime = 0;
-                    cheerAudio.muted = false;
-                }).catch(() => { cheerAudio.muted = false; });
-            } else {
-                cheerAudio.pause();
-                cheerAudio.currentTime = 0;
-                cheerAudio.muted = false;
-            }
-        } catch (_) {
-            cheerAudio.muted = false;
-        }
+        startBackgroundMusic();
     }
 }
 
@@ -366,40 +446,66 @@ function unlockAudio() {
 
 function playCheerAudio() {
     unlockAudio();
+    if (isAudioMuted) return;
     const ctx = getAudioContext();
 
-    // 1. Web Audio API (primary: instant, never blocked by iOS once context is running)
+    // Giảm nhỏ nhạc nền khi hô cổ vũ
+    duckBackgroundMusic(DUCKED_BG_VOLUME, 150);
+
+    const onCheerComplete = () => {
+        // Hồi phục âm lượng nhạc nền sau khi hô xong
+        duckBackgroundMusic(NORMAL_BG_VOLUME, 400);
+    };
+
+    // 1. Web Audio API (Primary: tức thì, tương thích cao trên iOS khi context đã mở)
     if (ctx && cheerAudioBuffer) {
         try {
             if (ctx.state === 'suspended') ctx.resume();
-            if (cheerAudioSource) {
-                try { cheerAudioSource.stop(); } catch(_) {}
-            }
             const src = ctx.createBufferSource();
             src.buffer = cheerAudioBuffer;
             src.connect(ctx.destination);
+            src.onended = onCheerComplete;
             src.start(0);
-            cheerAudioSource = src;
             return;
         } catch (_) {}
     }
 
-    // 2. HTML5 Audio Element Fallback
-    try {
-        cheerAudio.pause();
-        cheerAudio.currentTime = 0;
-        cheerAudio.muted = false;
-        const result = cheerAudio.play();
-        if (result && typeof result.catch === 'function') {
-            result.catch(err => {
-                if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
-                    toast('Chạm màn hình một lần để kích hoạt âm thanh.');
-                } else if (err && err.name === 'NotSupportedError') {
-                    toast('Định dạng audio không được hỗ trợ.');
-                }
-            });
+    // 2. HTML5 Audio fallback
+    if (cheerAudio) {
+        try {
+            cheerAudio.pause();
+            cheerAudio.currentTime = 0;
+            cheerAudio.muted = false;
+            cheerAudio.onended = onCheerComplete;
+            const p = cheerAudio.play();
+            if (p && typeof p.then === 'function') {
+                p.catch(() => { onCheerComplete(); });
+            }
+            setTimeout(onCheerComplete, 5200);
+        } catch (_) {
+            onCheerComplete();
         }
-    } catch (_) {}
+    }
+}
+
+function toggleAudioMute() {
+    isAudioMuted = !isAudioMuted;
+    initAudioElements();
+    if (bgAudio) {
+        if (isAudioMuted) {
+            bgAudio.pause();
+        } else {
+            bgAudio.volume = NORMAL_BG_VOLUME;
+            bgAudio.play().catch(() => {});
+        }
+    }
+    if (cheerAudio) cheerAudio.muted = isAudioMuted;
+    const btn = document.getElementById("audioToggleBtn");
+    if (btn) {
+        btn.textContent = isAudioMuted ? "🔇 Nhạc: Tắt" : "🔊 Nhạc: Bật";
+        btn.classList.toggle("muted", isAudioMuted);
+    }
+    toast(isAudioMuted ? "Đã tắt âm thanh." : "Đã bật âm thanh.");
 }
 function setAction(a) { if (!localPlayer || ritualActive || localPlayer.carriedBy) return; markActivity(); localPlayer.spotId = null; localPlayer.action = a; send({ type: "action", action: a }); if (a === "cheer") playCheerAudio(); toast(a === "cheer" ? "📣 Bạn đang hô cổ vũ! (Gạt nút chuông nếu iPhone im lặng)" : a === "bow" ? "🙇 Bạn cúi chào!" : a === "prostrate" ? "🙏 Bạn quỳ dập đầu bái cờ MU!" : "🧍 Trạng thái: Bình thường"); }
 addEventListener("keydown", e => { const typing = e.target instanceof HTMLElement && (["INPUT", "TEXTAREA"].includes(e.target.tagName) || e.target.isContentEditable); if (typing) return; keys[e.code] = true; if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault(); if (e.repeat) return; if (e.code === "Space") { if (localPlayer && !ritualActive && !localPlayer.carriedBy && !isJumping && !(["bow", "prostrate", "sit"].includes(localPlayer.action))) { isJumping = true; jumpVelocity = JUMP_POWER; localPlayer.action = "jump"; markActivity(); } return; } const binds = { KeyQ: "bow", KeyE: "cheer", KeyF: "idle", KeyG: "prostrate" }; if (binds[e.code]) setAction(binds[e.code]); }); addEventListener("keyup", e => keys[e.code] = false);
@@ -567,7 +673,11 @@ $("#enterBtn").addEventListener("click", () => { const name = cleanName(nameInpu
 $("#ritualYes").addEventListener("click", () => { if (!pendingJoin) return; $("#ritualModal").classList.add("hidden"); send({ type: "join", ...pendingJoin, approved: true }); pendingJoin = null });
 $("#ritualNo").addEventListener("click", () => { $("#ritualModal").classList.add("hidden"); toast("Nghi vấn gián điệp! Quỷ Đỏ chỉ mở cửa hang cho người sẵn lòng bái cờ MU!"); pendingJoin = null; });
 $("#stillHereBtn").addEventListener("click", dismissPresence);
-$("#leaveBtn").addEventListener("click", () => location.reload());
+$("#leaveBtn").addEventListener("click", () => {
+    stopBackgroundMusic();
+    location.reload();
+});
+document.getElementById("audioToggleBtn")?.addEventListener("click", toggleAudioMute);
 const chatPanel = $("#chatPanel"), chatToggle = $("#chatToggle");
 function openChat() { for (const k of Object.keys(keys)) keys[k] = false; pressedMoves.clear(); chatPanel.classList.remove("hidden"); chatToggle.setAttribute("aria-expanded", "true"); chatUnread = 0; $("#chatUnread").classList.add("hidden"); $("#chatUnread").textContent = "0"; $("#chatInput").focus(); }
 function closeChat() { chatPanel.classList.add("hidden"); chatToggle.setAttribute("aria-expanded", "false"); chatToggle.focus(); }
@@ -578,14 +688,33 @@ $("#chatClose").addEventListener("click", closeChat);
 $("#chatForm").addEventListener("submit", e => { e.preventDefault(); const input = $("#chatInput"), text = input.value.trim(); if (!text) return; send({ type: "chat", text }); input.value = ""; markActivity(); input.focus() });
 $("#chatInput").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeChat(); } }); $("#chatInput").addEventListener('input', () => { if (localPlayer) send({ type: 'activity' }); });
 addEventListener('pointerdown', () => { markActivity(); if (localPlayer) send({ type: 'activity' }); }, { passive: true }); addEventListener('keydown', e => { if (e.isComposing || e.keyCode === 229) return; markActivity(); if (localPlayer) send({ type: 'activity' }); }); addEventListener('touchstart', () => { markActivity(); if (localPlayer) send({ type: 'activity' }); }, { passive: true });
-// === MATCH ANNOUNCEMENT POP-UP MODAL ===
+// === POP-UP CHIẾN THẮNG ROMA & LỊCH ĐẤU ASTON VILLA ===
+const victoryModal = document.getElementById("victoryModal");
+const victoryModalClose = document.getElementById("victoryModalClose");
+const victoryModalNext = document.getElementById("victoryModalNext");
+
 const matchModal = document.getElementById("matchModal");
 const matchModalClose = document.getElementById("matchModalClose");
 const matchModalOk = document.getElementById("matchModalOk");
+const matchModalBack = document.getElementById("matchModalBack");
+
 const matchNoticeBar = document.getElementById("matchNoticeBar");
 const hudMatchNoticeBtn = document.getElementById("hudMatchNoticeBtn");
 
+function openVictoryModal() {
+    if (matchModal) matchModal.classList.add("hidden");
+    if (victoryModal) victoryModal.classList.remove("hidden");
+    markActivity();
+}
+function closeVictoryModal(proceedToMatch = false) {
+    if (victoryModal) victoryModal.classList.add("hidden");
+    if (proceedToMatch) {
+        openMatchModal();
+    }
+    markActivity();
+}
 function openMatchModal() {
+    if (victoryModal) victoryModal.classList.add("hidden");
     if (matchModal) matchModal.classList.remove("hidden");
     markActivity();
 }
@@ -594,14 +723,21 @@ function closeMatchModal() {
     markActivity();
 }
 
-matchModalClose?.addEventListener("click", closeMatchModal);
-matchModalOk?.addEventListener("click", closeMatchModal);
-matchNoticeBar?.addEventListener("click", openMatchModal);
-hudMatchNoticeBtn?.addEventListener("click", openMatchModal);
+victoryModalNext?.addEventListener("click", () => closeVictoryModal(true));
+victoryModalClose?.addEventListener("click", () => closeVictoryModal(false));
+victoryModal?.addEventListener("click", e => {
+    if (e.target === victoryModal) closeVictoryModal(false);
+});
 
+matchModalOk?.addEventListener("click", closeMatchModal);
+matchModalClose?.addEventListener("click", closeMatchModal);
+matchModalBack?.addEventListener("click", openVictoryModal);
 matchModal?.addEventListener("click", e => {
     if (e.target === matchModal) closeMatchModal();
 });
+
+matchNoticeBar?.addEventListener("click", openVictoryModal);
+hudMatchNoticeBtn?.addEventListener("click", openVictoryModal);
 
 setInterval(() => { if (localPlayer) send({ type: 'heartbeat' }); }, 15000);
 connect();
