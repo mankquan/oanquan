@@ -20,13 +20,13 @@ function handleMessage(m) {
     if (m.type === "join-error") { toast(m.message || "Tên hiển thị không hợp lệ."); $("#nameHint").textContent = m.message || "Hãy chọn tên khác."; $("#nameHint").classList.add("invalid"); }
     if (m.type === "joined") {
         myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.totalCount || m.players.length;
-        landing.classList.add("hidden"); game.classList.remove("hidden"); init3D(); for (const p of m.players) addPlayer(p, p.id === myId); if (localPlayer) { ritualActive = true; ritualStart = performance.now(); localPlayer.avatar.root.position.set(0, 0, 10); localPlayer.target.set(0, 0, 10); localPlayer.avatar.root.rotation.y = Math.PI; localPlayer.action = "walk"; if (localPlayer.carryingId || localPlayer.carriedBy) showCarryRelease(true); toast("Đang tiến đến thảm làm nghi thức nhập hang…"); }
+        landing.classList.add("hidden"); game.classList.remove("hidden"); init3D(); for (const p of m.players) addPlayer(p, p.id === myId); updateCount(); if (localPlayer) { ritualActive = true; ritualStart = performance.now(); localPlayer.avatar.root.position.set(0, 0, 10); localPlayer.target.set(0, 0, 10); localPlayer.avatar.root.rotation.y = Math.PI; localPlayer.action = "walk"; if (localPlayer.carryingId || localPlayer.carriedBy) showCarryRelease(true); toast("Đang tiến đến thảm làm nghi thức nhập hang…"); }
         startBackgroundMusic();
     }
     if (m.type === "player-joined") { addPlayer(m.player, false); updateCount(); }
     if (m.type === "player-left") { removePlayer(m.id); updateCount(); _rebuildSeatPanelIfOpen(); }
     if (m.type === "player-updated") { const p = players.get(m.player.id); if (p) { const wasCheering = p.action === "cheer"; p.target.set(m.player.x, 0, m.player.z); if (p === localPlayer && m.player.spotId) p.avatar.root.position.set(m.player.x, 0, m.player.z); p.action = m.player.action; p.spotId = m.player.spotId || null; p.carryingId = m.player.carryingId || null; p.carriedBy = m.player.carriedBy || null; if (p === localPlayer && p.spotId && p.action === "cheer" && !wasCheering) playCheerAudio(); } _rebuildSeatPanelIfOpen(); }
-    if (m.type === "carry-invite") { showCarryInvite(m.from); }
+    if (m.type === "carry-invite") { showCarryInvite(m.from, m.text); }
     if (m.type === "carry-pending") toast(`Đã gửi lời mời cõng ${m.targetName}.`);
     if (m.type === "carry-declined") toast(`${m.targetName} đã từ chối lời mời cõng.`);
     if (m.type === "carry-error") toast(m.message || "Không thể thực hiện tương tác cõng.");
@@ -38,7 +38,7 @@ function handleMessage(m) {
     if (m.type === "carry-started") { const carrier = players.get(m.carrierId), passenger = players.get(m.passengerId); if (carrier && passenger) { carrier.carryingId = passenger.id; passenger.carriedBy = carrier.id; passenger.carryStyle = m.style || "piggyback"; carrier.action = "idle"; passenger.action = "carried"; carrier.spotId = null; passenger.spotId = null; } hideCarryMenu(); if (localPlayer && (localPlayer.id === m.carrierId || localPlayer.id === m.passengerId)) showCarryRelease(true); }
     if (m.type === "carry-ended") { const carrier = players.get(m.carrierId), passenger = players.get(m.passengerId); if (carrier) carrier.carryingId = null; if (passenger) { passenger.carriedBy = null; passenger.carryStyle = null; passenger.avatar.root.rotation.z = 0; } if (carrier && carrier.action === "carried") carrier.action = "idle"; if (passenger && passenger.action === "carried") passenger.action = "idle"; if (localPlayer && (localPlayer.id === m.carrierId || localPlayer.id === m.passengerId)) { showCarryRelease(false); toast("Đã kết thúc cõng."); } }
     if (m.type === "spot-error") toast(m.message);
-    if (m.type === "chat") addChatLine(m.name, m.jerseyNumber, m.text);
+    if (m.type === "chat") { addChatLine(m.name, m.jerseyNumber, m.text); showSpeechBubble(m.id, m.text); }
     if (m.type === "chat-error") toast(m.message);
     if (m.type === "hang-mode") applyHangMode(m.mode, m.by, m.mood);
     if (m.type === "hang-event") showHangEvent(m.message);
@@ -58,6 +58,55 @@ function showHangEvent(message) { const el = $('#hangEventBanner'); el.textConte
 
 function updateCount() { $("#onlineCount").textContent = players.size; }
 function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 1800) }
+function showSpeechBubble(playerId, text) {
+    const p = players.get(playerId);
+    if (!p || !p.avatar) return;
+    if (p._bubbleSprite) {
+        p.avatar.root.remove(p._bubbleSprite);
+        p._bubbleSprite.material.map?.dispose();
+        p._bubbleSprite.material.dispose();
+        p._bubbleSprite = null;
+    }
+    clearTimeout(p._bubbleTimer);
+    const shortText = text.length > 34 ? text.slice(0, 32) + '…' : text;
+    const c = document.createElement("canvas");
+    c.width = 512; c.height = 160;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "rgba(18, 9, 8, 0.92)";
+    ctx.strokeStyle = "#e5b653";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.roundRect(16, 12, 480, 110, 24);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(236, 122);
+    ctx.lineTo(256, 152);
+    ctx.lineTo(276, 122);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = "bold 34px system-ui, sans-serif";
+    ctx.fillStyle = "#fff7e8";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(shortText, 256, 68);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
+    sprite.scale.set(2.4, .75, 1);
+    sprite.position.y = 2.65;
+    p.avatar.root.add(sprite);
+    p._bubbleSprite = sprite;
+    p._bubbleTimer = setTimeout(() => {
+        if (p._bubbleSprite) {
+            p.avatar.root.remove(p._bubbleSprite);
+            p._bubbleSprite.material.map?.dispose();
+            p._bubbleSprite.material.dispose();
+            p._bubbleSprite = null;
+        }
+    }, 4500);
+}
 function textSprite(text, opts = {}) {
     const c = document.createElement("canvas"); c.width = 512; c.height = 128; const x = c.getContext("2d"); x.clearRect(0, 0, 512, 128);
     x.font = `900 ${opts.size || 64}px system-ui,sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineWidth = 12; x.strokeStyle = "#210908"; x.strokeText(text, 256, 64); x.fillStyle = opts.color || "#fff2cf"; x.fillText(text, 256, 64);
@@ -119,7 +168,7 @@ function makeAvatar(name, number) {
     const nameSprite = textSprite(name.slice(0, 18), { size: 54, width: 1.55, height: .38, color: "#ffffff" }); nameSprite.position.y = 2.42; root.add(nameSprite); const titleSprite = textSprite('Fan nửa mùa', { size: 34, width: 1.5, height: .28, color: '#ffd58a' }); titleSprite.position.y = 2.12; root.add(titleSprite);
     return { root, bodyRig, arms: sleeves, legs: legPivots, headGroup, nameSprite, titleSprite, jerseyPrint };
 }
-function addPlayer(p, isLocal) { if (players.has(p.id)) return; const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7); avatar.root.position.set(p.x, 0, p.z); avatar.root.rotation.y = Math.PI; avatar.root.traverse(o => { o.userData.playerId = p.id }); scene.add(avatar.root); const entry = { id: p.id, name: p.name, jerseyNumber: p.jerseyNumber, isAfk: !!p.isAfk, joinedAt: p.joinedAt || Date.now(), strongFanAt: p.strongFanAt || 1050000, avatar, target: new THREE.Vector3(p.x, 0, p.z), action: p.action || "idle", spotId: p.spotId || null, carryingId: p.carryingId || null, carriedBy: p.carriedBy || null, phase: Math.random() * 6 }; players.set(p.id, entry); if (isLocal) localPlayer = entry }
+function addPlayer(p, isLocal) { if (players.has(p.id)) return; const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7); avatar.root.position.set(p.x, 0, p.z); avatar.root.rotation.y = Math.PI; avatar.root.traverse(o => { o.userData.playerId = p.id }); scene.add(avatar.root); const entry = { id: p.id, name: p.name, title: p.title, jerseyNumber: p.jerseyNumber, isAfk: !!p.isAfk, joinedAt: p.joinedAt || Date.now(), strongFanAt: p.strongFanAt || 1050000, avatar, target: new THREE.Vector3(p.x, 0, p.z), action: p.action || "idle", spotId: p.spotId || null, carryingId: p.carryingId || null, carriedBy: p.carriedBy || null, phase: Math.random() * 6 }; players.set(p.id, entry); if (isLocal) localPlayer = entry; updateCount(); }
 function removePlayer(id) { const p = players.get(id); if (p) { scene.remove(p.avatar.root); players.delete(id) } }
 function mat(color, roughness = 1) { return new THREE.MeshStandardMaterial({ color, roughness }) }
 function createFlame(position, scale = 1) {
@@ -268,7 +317,7 @@ function onSpotPointer(event) {
 }
 function showCarryMenu(target, x, y) { selectedCarryTarget = target; const menu = $("#carryMenu"); menu.querySelector("span").textContent = `Tương tác với ${target.name} (#${target.jerseyNumber})`; menu.style.left = `${Math.min(x, innerWidth - 205)}px`; menu.style.top = `${Math.min(y, innerHeight - 230)}px`; menu.classList.remove("hidden"); }
 function hideCarryMenu() { const menu = $("#carryMenu"); if (menu) menu.classList.add("hidden"); selectedCarryTarget = null; }
-function showCarryInvite(from) { clearTimeout(carryInviteTimer); const modal = $("#carryInviteModal"); $("#carryInviteText").textContent = `${from.name} (#${from.jerseyNumber}) muốn cõng bạn. Bạn có đồng ý không?`; modal.dataset.fromId = from.id; modal.classList.remove("hidden"); carryInviteTimer = setTimeout(() => { modal.classList.add("hidden"); }, 15000); }
+function showCarryInvite(from, text) { clearTimeout(carryInviteTimer); const modal = $("#carryInviteModal"); $("#carryInviteText").textContent = text || `${from.name} (#${from.jerseyNumber}) muốn cõng bạn. Bạn có đồng ý không?`; modal.dataset.fromId = from.id; modal.classList.remove("hidden"); carryInviteTimer = setTimeout(() => { modal.classList.add("hidden"); }, 15000); }
 function showInteractionInvite(m) { clearTimeout(interactionInviteTimer); const modal = $("#interactionInviteModal"); const labels = { highfive: "đập tay", handshake: "bắt tay", push: "đẩy nhẹ" }; modal.dataset.inviteId = m.inviteId; modal.dataset.fromId = m.from.id; modal.dataset.kind = m.kind; $("#interactionInviteText").textContent = `${m.from.name} (#${m.from.jerseyNumber}) mời bạn ${labels[m.kind] || "tương tác"}. Bạn đồng ý chứ?`; modal.classList.remove("hidden"); interactionInviteTimer = setTimeout(() => modal.classList.add("hidden"), 15000); }
 function sendInteraction(kind) { if (!selectedCarryTarget) return; send({ type: "interaction-request", targetId: selectedCarryTarget.id, kind }); hideCarryMenu(); markActivity(); }
 function showCarryRelease(show) { $("#carryRelease").classList.toggle("hidden", !show); }
@@ -284,7 +333,18 @@ function animate() {
     requestAnimationFrame(animate); const dt = Math.min(clock.getDelta(), .05), now = clock.elapsedTime; updateFlames(now, dt);
     for (const pad of seatSpots.values()) pad.material = spotMaterials.free;
     for (const p of players.values()) {
-        const a = p.avatar, active = p.action; const elapsed = Date.now() - p.joinedAt; const fanTitle = elapsed >= (p.strongFanAt || 315000) ? 'Fan nghị lực' : elapsed >= 90000 ? 'Fan MU' : 'Fan nửa mùa'; if (p._shownTitle !== fanTitle) { a.titleSprite.material.map.dispose(); a.titleSprite.material.dispose(); a.root.remove(a.titleSprite); a.titleSprite = textSprite(fanTitle, { size: 34, width: 1.5, height: .28, color: fanTitle === 'Fan nghị lực' ? '#ff8b72' : fanTitle === 'Fan MU' ? '#ffe0a0' : '#ffd58a' }); a.titleSprite.position.y = 2.12; a.root.add(a.titleSprite); p._shownTitle = fanTitle; }
+        const a = p.avatar, active = p.action;
+        const elapsed = Date.now() - p.joinedAt;
+        const fanTitle = p.title || (elapsed >= (p.strongFanAt || 315000) ? 'Fan nghị lực' : elapsed >= 90000 ? 'Fan MU' : 'Fan nửa mùa');
+        if (p._shownTitle !== fanTitle) {
+            a.titleSprite.material.map.dispose();
+            a.titleSprite.material.dispose();
+            a.root.remove(a.titleSprite);
+            a.titleSprite = textSprite(fanTitle, { size: 34, width: 1.6, height: .28, color: '#ffe0a0' });
+            a.titleSprite.position.y = 2.12;
+            a.root.add(a.titleSprite);
+            p._shownTitle = fanTitle;
+        }
         if (p !== localPlayer) a.root.position.lerp(p.target, .22);
         const interaction = [...activeInteractions.values()].find(v => (v.a === p.id || v.b === p.id) && v.until > performance.now()); const cheering = active === "cheer", bowing = active === "bow", walking = active === "walk", prostrating = active === "prostrate", standingSpot = active === "sit", carried = active === "carried";
         // A low, stable kneeling bow: legs fold first, torso lowers from the hips.

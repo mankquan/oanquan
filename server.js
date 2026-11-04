@@ -36,21 +36,39 @@ const wss = new WebSocket.Server({ server, maxPayload: 2048 });
 
 // === 40 TÊN NHÂN VẬT AFK THEO YÊU CẦU CHÍNH XÁC ===
 const AFK_NAMES = [
-  // Phòng 1: hang-01
+  // Phòng 1: hang-01 (15 nhân vật)
   "Bố Ronaldo", "Mõm MU", "Quỷ Đỏ", "Đỏ Lòm", "Gáy Thuê",
   "Sút Ngu", "Chân Gỗ", "Gỗ Lim", "Tạ Tấn", "Mười Khó",
-  // Phòng 2: hang-02
   "Hết Cứu", "Báo Thủ", "Phế Vật", "Cu Li", "Mõm To",
+  // Phòng 2: hang-02 (12 nhân vật)
   "Đá Mướn", "Chúa Hề", "Thánh Lầy", "Gánh Team", "Bán Độ",
-  // Phòng 3: hang-03
   "Nằm Sân", "Ngáo Đá", "Cò Đất", "Bún Chả", "Mì Tôm",
-  "Cơm Nguội", "Nợ Lương", "Trả Góp", "Đá Mồm", "Chém Gió",
-  // Phòng 4: hang-04
-  "Chạy Show", "Thủ Môn", "Phản Lưới", "Tấu Hài", "Đầu Bò",
+  "Cơm Nguội", "Nợ Lương",
+  // Phòng 3: hang-03 (8 nhân vật)
+  "Trả Góp", "Đá Mồm", "Chém Gió", "Chạy Show",
+  "Thủ Môn", "Phản Lưới", "Tấu Hài", "Đầu Bò",
+  // Phòng 4: hang-04 (5 nhân vật)
   "Gà Mờ", "Bố Đời", "Trùm Cuối", "Vua Báo", "Hết Pin"
 ];
 
-// Danh sách câu nói chân thực của fan MU chui hang để bot chat chậm chậm tạo không khí
+// === 40 DANH HIỆU KHÁC NHAU CHO TỪNG NHÂN VẬT AFK ===
+const AFK_TITLES = [
+  // Phòng 1
+  "Quỷ Đỏ kỳ cựu", "Fan MU 20 năm", "Trưởng thôn Hang MU", "Chiến thần gáy thuê", "Bình luận viên mõm",
+  "Hộ pháp Old Trafford", "Fan ruột Sir Alex", "Thánh lạc quan", "Tín đồ Quỷ Đỏ", "Chuyên gia chui hang",
+  "Chiến thần thức đêm", "Chúa tể niềm tin", "Người truyền lửa", "Fan ruột Ten Hag", "Quỷ Đỏ bất diệt",
+  // Phòng 2
+  "Đại sứ niềm tin", "Vua ăn mì tôm", "Fan MU chân chính", "Cổ động viên cứng", "Tay gáy chuyên nghiệp",
+  "Giáo sư phân tích", "Thánh bắt pen", "Huyền thoại chém gió", "Quản lý hang MU", "Cây hài của hang",
+  "Fan MU từ bé", "Quỷ Đỏ ngầm",
+  // Phòng 3
+  "Siêu fan nghị lực", "Chuyên gia xem đêm", "Thánh soi VAR", "Chiến thần cổ vũ",
+  "Hội phó hang MU", "Fan MU trung kiên", "Người gác đền đỏ", "Thợ săn bàn thắng",
+  // Phòng 4
+  "Bậc thầy kiên nhẫn", "Tộc trưởng Quỷ Đỏ", "Bố già Hang MU", "Đấng cứu thế đỏ", "Fan cứng bất tử"
+];
+
+// Câu thoại fan MU phong phú, hài hước, phản ánh đúng trận đấu và văn hóa chui hang
 const AFK_CHAT_QUOTES = [
   "Trận tới gặp Aston Villa 23:30 Chủ nhật phải thắng anh em ơi! 🔥",
   "Thắng Roma 3-2 hú vía, tim suýt nhảy ra ngoài 😅",
@@ -73,24 +91,39 @@ const AFK_CHAT_QUOTES = [
   "Tối chủ nhật này anh em nhớ điểm danh đúng 23:30 nhé!"
 ];
 
-// 15 Vị trí đứng/ngồi/cõng phân bố hợp lý trong hang (không chặn lối đi, không đè lên đĩa tròn của người chơi)
+// 15 Vị trí xuất phát của bot AFK
 const AFK_SPOTS = [
-  { x: -3.2, z: -8.0, action: 'cheer' },     // 0: Trái bàn chiến thuật - Đứng hát / cổ vũ
-  { x:  3.2, z: -8.0, action: 'idle' },      // 1: Phải bàn chiến thuật - Đứng xem
-  { x: -4.8, z: -4.0, action: 'sit' },       // 2: Cánh trái - Ngồi tĩnh tâm
-  { x:  4.8, z: -4.0, action: 'bow' },       // 3: Cánh phải - Cúi chào
-  { x: -2.8, z:  1.5, action: 'idle' },      // 4: Mép thảm trái - Đứng tĩnh tâm
-  { x:  2.8, z:  1.5, action: 'cheer' },     // 5: Mép thảm phải - Hô cổ vũ
-  { x: -3.6, z:  6.0, action: 'idle' },      // 6: Cõng bạn (carrier)
-  { x: -3.6, z:  6.0, action: 'carried' },   // 7: Được cõng trên lưng (passenger)
-  { x:  3.6, z:  6.0, action: 'prostrate' }, // 8: Quỳ dập đầu bái cờ
-  { x: -1.8, z: -14.5, action: 'cheer' },    // 9: Gần đốm lửa thiêng trái - Hô cổ vũ
-  { x:  1.8, z: -14.5, action: 'bow' },      // 10: Gần đốm lửa thiêng phải - Cúi chào trước lửa
-  { x: -1.6, z:  8.5, action: 'cheer' },     // 11: Lối vào hang bên trái - Cổ vũ đón anh em
-  { x:  1.6, z:  8.5, action: 'idle' },      // 12: Lối vào hang bên phải - Đứng đón anh em
-  { x: -4.5, z: -11.5, action: 'prostrate' },// 13: Hành lang trên bên trái - Quỳ bái
-  { x:  4.5, z: -11.5, action: 'sit' }       // 14: Hành lang trên bên phải - Ngồi tĩnh tâm
+  { x: -3.2, z: -8.0, action: 'cheer' },
+  { x:  3.2, z: -8.0, action: 'idle' },
+  { x: -4.8, z: -4.0, action: 'sit' },
+  { x:  4.8, z: -4.0, action: 'bow' },
+  { x: -2.8, z:  1.5, action: 'idle' },
+  { x:  2.8, z:  1.5, action: 'cheer' },
+  { x: -3.6, z:  6.0, action: 'idle' },
+  { x: -3.6, z:  6.0, action: 'carried' },
+  { x:  3.6, z:  6.0, action: 'prostrate' },
+  { x: -1.8, z: -14.5, action: 'cheer' },
+  { x:  1.8, z: -14.5, action: 'bow' },
+  { x: -1.6, z:  8.5, action: 'cheer' },
+  { x:  1.6, z:  8.5, action: 'idle' },
+  { x: -4.5, z: -11.5, action: 'prostrate' },
+  { x:  4.5, z: -11.5, action: 'sit' }
 ];
+
+// Danh sách 50 đĩa tròn ghế ngồi trong hang
+const CAVE_SPOTS = [];
+for (const side of ['l', 'r']) {
+  for (let col = 0; col < 5; col++) {
+    for (let row = 0; row < 5; row++) {
+      const s = side === 'l' ? -1 : 1;
+      CAVE_SPOTS.push({
+        id: `spot-${side}-${col}-${row}`,
+        x: s * (6.7 + col * 1.45),
+        z: -10 + row * 3.5
+      });
+    }
+  }
+}
 
 const rooms = new Map();
 const clients = new Map();
@@ -107,12 +140,11 @@ const MOODS = {
 
 const serverStartTime = Date.now();
 
-// Phân bổ 40 nhân vật AFK hoàn toàn phía server qua 4 phòng:
-// Phòng 1 (Hang chính/VIP): 15 AFK (đông đúc, khí thế nhất)
+// Cấu hình phân bổ 40 nhân vật AFK hoàn toàn phía server qua 4 phòng:
+// Phòng 1 (Hang chính): 15 AFK
 // Phòng 2 (Hang sôi động): 12 AFK
-// Phòng 3 (Hang vừa phải): 8 AFK
+// Phòng 3 (Hang vừa): 8 AFK
 // Phòng 4 (Hang tĩnh tâm): 5 AFK
-// Tổng cộng: 15 + 12 + 8 + 5 = đúng 40 AFK với 40 tên khác nhau không trùng lặp
 const ROOM_AFK_CONFIG = [
   { id: 'hang-01', count: 15 },
   { id: 'hang-02', count: 12 },
@@ -125,37 +157,46 @@ for (const cfg of ROOM_AFK_CONFIG) {
   const roomId = cfg.id;
   const afkCount = cfg.count;
   const room = {
-    players: new Map(), // Danh sách người chơi thật có WebSocket
-    afks: new Map(),    // AFK cố định phía server của phòng
+    players: new Map(), // Người chơi thật có WebSocket
+    afks: new Map(),    // AFK NPC phía server của phòng
     afkList: [],        // Thứ tự danh sách AFK
-    nextAfkChatAt: serverStartTime + 10000 + Math.floor(Math.random() * 20000)
+    nextAfkChatAt: serverStartTime + 10000 + Math.floor(Math.random() * 20000),
+    nextNpcCarryRequestAt: serverStartTime + 20000 + Math.floor(Math.random() * 25000)
   };
 
+  const personalities = ['wanderer', 'cheerer', 'sitter', 'social'];
+
   for (let j = 0; j < afkCount; j++) {
-    const name = AFK_NAMES[globalNameIndex++];
+    const idx = globalNameIndex++;
+    const name = AFK_NAMES[idx];
+    const title = AFK_TITLES[idx] || "Quỷ Đỏ trung kiên";
     const spot = AFK_SPOTS[j];
     const id = `afk-${roomId}-${j}`;
     const bot = {
       id,
       name,
+      title,
       jerseyNumber: 11 + j,
+      personality: personalities[j % personalities.length],
       x: spot.x,
       z: spot.z,
       homeX: spot.x,
       homeZ: spot.z,
       action: spot.action,
+      spotId: null,
       carryingId: null,
       carriedBy: null,
+      carryAutoDropAt: 0,
       isAfk: true,
       joinedAt: serverStartTime,
       strongFanAt: 60000,
-      nextActionAt: serverStartTime + 8000 + j * 3200
+      nextActionAt: serverStartTime + 3000 + j * 1500
     };
     room.afks.set(id, bot);
     room.afkList.push(bot);
   }
 
-  // Khởi tạo cặp cõng nhau giữa bot 6 và bot 7 tạo không khí (cho các phòng có đủ từ 8 bot trở lên)
+  // Khởi tạo cặp cõng nhau giữa bot 6 và bot 7 tạo không khí (phòng >= 8 bot)
   if (afkCount >= 8) {
     const b6 = room.afks.get(`afk-${roomId}-6`);
     const b7 = room.afks.get(`afk-${roomId}-7`);
@@ -183,7 +224,27 @@ function inappropriateName(name) {
   return bannedTerms.some(w => n.split(/[^a-z0-9]+/).includes(w));
 }
 
-// Số lượng người tham gia hiển thị trên danh sách phòng (bao gồm cả các thành viên AFK để sảnh đông vui, đẹp mắt)
+// Lấy danh sách các đĩa tròn đang có người hoặc bot ngồi
+function getOccupiedSpotIds(room) {
+  const occ = new Set();
+  for (const p of room.players.values()) {
+    if (p.spotId) occ.add(p.spotId);
+  }
+  for (const b of room.afks.values()) {
+    if (b.spotId) occ.add(b.spotId);
+  }
+  return occ;
+}
+
+// Lấy danh sách AFK đang hoạt động (khi phòng tầm 30 người, mỗi người vào thì 1 AFK nhường chỗ)
+function getActiveAfks(room) {
+  const realCount = room.players.size;
+  const maxAfk = room.afkList.length;
+  const targetCount = realCount >= 30 ? Math.max(0, maxAfk - (realCount - 30)) : maxAfk;
+  return room.afkList.slice(0, targetCount);
+}
+
+// Số lượng người chơi hiển thị trên danh sách phòng (gồm người thật + AFK để sảnh luôn đông vui, đẹp mắt)
 function roomSnapshot() {
   return [...rooms.entries()].map(([id, r]) => ({
     id,
@@ -224,19 +285,11 @@ function publicPlayer(p) {
     spotId: p.spotId || null,
     carryingId: p.carryingId || null,
     carriedBy: p.carriedBy || null,
-    title: p.isAfk ? 'Fan cứng' : fanTitle(p),
+    title: p.title || (p.isAfk ? 'Fan cứng' : fanTitle(p)),
     joinedAt: p.joinedAt,
     strongFanAt: p.strongFanAt,
     isAfk: !!p.isAfk
   };
-}
-
-// Lấy danh sách AFK đang hoạt động (khi phòng tầm 30 người, cứ mỗi người vào thì 1 AFK nhường chỗ)
-function getActiveAfks(room) {
-  const realCount = room.players.size;
-  const maxAfk = room.afkList.length;
-  const targetCount = realCount >= 30 ? Math.max(0, maxAfk - (realCount - 30)) : maxAfk;
-  return room.afkList.slice(0, targetCount);
 }
 
 function endCarry(roomId, p) {
@@ -258,6 +311,11 @@ function endCarry(roomId, p) {
     passenger.carriedBy = null;
     passenger.action = 'idle';
     passenger.spotId = null;
+    passenger.carryAutoDropAt = 0;
+    if (carrier) {
+      passenger.x = Math.max(-12, Math.min(12, carrier.x + 0.8));
+      passenger.z = Math.max(-16, Math.min(8, carrier.z));
+    }
   }
 
   broadcast(roomId, { type: 'carry-ended', carrierId, passengerId });
@@ -404,11 +462,30 @@ wss.on('connection', ws => {
         hangMode,
         mood: MOODS[hangMode],
         players: allEntities,
+        totalCount: allEntities.length,
+        onlineCount: allEntities.length,
         realCount: room.players.size
       });
 
       broadcast(roomId, { type: 'player-joined', player: publicPlayer(p) }, id);
       broadcastRoomList();
+
+      // NPC tự động chào mừng người chơi mới vào hang sau 2.5 giây
+      setTimeout(() => {
+        const currentActive = getActiveAfks(room);
+        if (currentActive.length > 0 && room.players.has(id)) {
+          const greeter = currentActive[Math.floor(Math.random() * currentActive.length)];
+          const greetings = [
+            `Chào mừng ${name} (#${jerseyNumber}) vào Hang Quỷ Đỏ! 🔴`,
+            `Ê bro ${name}, vào hang ngồi cho ấm cúng nhé! 🔥`,
+            `Chào mừng người anh em ${name}! Cùng quẩy chờ Chủ nhật này nào! 🍻`,
+            `Hello ${name}, hôm nay hang đông vui lắm bro ơi!`
+          ];
+          const text = greetings[Math.floor(Math.random() * greetings.length)];
+          broadcast(roomId, { type: 'chat', id: greeter.id, name: greeter.name, jerseyNumber: greeter.jerseyNumber, text, at: Date.now() });
+        }
+      }, 2500);
+
       return;
     }
 
@@ -485,6 +562,7 @@ wss.on('connection', ws => {
       return;
     }
 
+    // Xử lý khi người chơi yêu cầu cõng
     if (m.type === 'carry-request') {
       if (Date.now() < p.ritualUntil) {
         send(ws, { type: 'carry-error', message: 'Hoàn tất nghi thức nhập hang rồi hãy mời cõng nhé.' });
@@ -520,12 +598,13 @@ wss.on('connection', ws => {
         p.spotId = null;
         target.spotId = null;
         p.lastActivity = Date.now();
+        // Cõng trong 5 - 10 giây sẽ tự động tụt xuống
+        target.carryAutoDropAt = Date.now() + (5000 + Math.floor(Math.random() * 5000));
 
         broadcast(state.roomId, { type: 'carry-started', style: target.carryStyle, carrierId: p.id, passengerId: target.id });
         broadcast(state.roomId, { type: 'player-updated', player: publicPlayer(p) });
         broadcast(state.roomId, { type: 'player-updated', player: publicPlayer(target) });
 
-        // Bot phản hồi vào chat
         const carryReplies = [
           `Được ${p.name} cõng thích quá, quẩy banh nóc hang nào! 🚀`,
           `Lên lưng ${p.name} đi ngắm cờ MU thôi anh em ơi! 🔥`,
@@ -553,8 +632,42 @@ wss.on('connection', ws => {
         return;
       }
       const fromId = String(m.fromId || '');
-      const from = room.players.get(fromId);
       const pending = p.pendingCarryFrom;
+
+      // Nếu là NPC mời người chơi cõng nó
+      if (pending && pending.isNpc) {
+        const npc = room.afks.get(fromId);
+        p.pendingCarryFrom = null;
+        if (!npc || Date.now() - pending.at > 15000) {
+          send(ws, { type: 'carry-error', message: 'Lời mời cõng đã hết hạn.' });
+          return;
+        }
+        if (m.accept !== true) {
+          broadcast(state.roomId, { type: 'chat', id: npc.id, name: npc.name, jerseyNumber: npc.jerseyNumber, text: `Haha không sao bro, để tui tự đi bộ ngắm cờ vậy!`, at: Date.now() });
+          return;
+        }
+        if (p.carryingId || p.carriedBy || npc.carryingId || npc.carriedBy) {
+          send(ws, { type: 'carry-error', message: 'Không thể bắt đầu cõng lúc này.' });
+          return;
+        }
+        p.carryingId = npc.id;
+        npc.carriedBy = p.id;
+        p.action = 'idle';
+        npc.action = 'carried';
+        p.spotId = null;
+        npc.spotId = null;
+        // Tự động nhảy xuống sau 5 - 10 giây
+        npc.carryAutoDropAt = Date.now() + (5000 + Math.floor(Math.random() * 5000));
+        p.lastActivity = Date.now();
+
+        broadcast(state.roomId, { type: 'carry-started', style: 'piggyback', carrierId: p.id, passengerId: npc.id });
+        broadcast(state.roomId, { type: 'player-updated', player: publicPlayer(p) });
+        broadcast(state.roomId, { type: 'player-updated', player: publicPlayer(npc) });
+        broadcast(state.roomId, { type: 'chat', id: npc.id, name: npc.name, jerseyNumber: npc.jerseyNumber, text: `Cảm ơn bro ${p.name} nhé, lên lưng quẩy thôi nào! 🚀`, at: Date.now() });
+        return;
+      }
+
+      const from = room.players.get(fromId);
       if (!from || Date.now() < from.ritualUntil || !pending || pending.id !== fromId || Date.now() - pending.at > 15000) {
         p.pendingCarryFrom = null;
         send(ws, { type: 'carry-error', message: 'Lời mời cõng đã hết hạn.' });
@@ -680,14 +793,26 @@ wss.on('connection', ws => {
       p.presencePromptAt = 0;
       const spotId = String(m.spotId || '');
       if (!/^spot-[a-z0-9-]{1,24}$/.test(spotId)) return;
-      for (const otherRoom of rooms.values()) {
-        for (const other of otherRoom.players.values()) {
-          if (other.id !== p.id && otherRoom === room && other.spotId === spotId) {
-            send(ws, { type: 'spot-error', message: 'Vị trí tròn này đã có Quỷ Đỏ đứng rồi, bạn chọn chỗ khác nhé!' });
-            return;
-          }
+
+      // Kiểm tra người chơi thật khác đã ngồi chưa
+      for (const other of room.players.values()) {
+        if (other.id !== p.id && other.spotId === spotId) {
+          send(ws, { type: 'spot-error', message: 'Vị trí tròn này đã có Quỷ Đỏ đứng rồi, bạn chọn chỗ khác nhé!' });
+          return;
         }
       }
+
+      // Nếu có NPC đang ngồi ở đây, NPC lịch sự nhường chỗ cho người thật!
+      for (const bot of room.afks.values()) {
+        if (bot.spotId === spotId) {
+          bot.spotId = null;
+          bot.action = 'walk';
+          bot.x = Math.max(-10, Math.min(10, bot.x + (bot.x > 0 ? -1.5 : 1.5)));
+          broadcast(state.roomId, { type: 'player-updated', player: publicPlayer(bot) });
+          break;
+        }
+      }
+
       const parts = spotId.split('-');
       const side = parts[1] === 'l' ? -1 : 1, col = Number(parts[2]), row = Number(parts[3]);
       if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col > 4 || row < 0 || row > 4) return;
@@ -742,17 +867,84 @@ wss.on('connection', ws => {
   ws.on('error', () => removePlayer(ws));
 });
 
-// Vòng lặp định kỳ: Quản lý AFK ngẫu nhiên hành động và kiểm tra Inactivity 15 phút
+// Vòng lặp định kỳ: Quản lý NPC Autonomous, Di chuyển, Điểm đĩa tròn, Xin cõng (5-10s) và Chat
 setInterval(() => {
   const now = Date.now();
 
-  // 1. AFK Bot Update Loop
   for (const [roomId, room] of rooms) {
-    if (room.players.size === 0) continue; // Phòng không có người chơi thật thì không tốn CPU broadcast
+    if (room.players.size === 0) continue; // Chỉ chạy khi có người thật trong phòng
     const activeAfks = getActiveAfks(room);
+    if (!activeAfks.length) continue;
 
-    // Tự động nhắn tin chat chậm chậm để tạo không khí thật, nhộn nhịp (mỗi 30-65 giây một tin)
-    if (now >= (room.nextAfkChatAt || 0) && activeAfks.length > 0) {
+    // 1. Tự động thả NPC xuống nếu đã được người chơi cõng đủ 5 - 10 giây
+    for (const bot of activeAfks) {
+      if (bot.carriedBy && bot.carryAutoDropAt && now >= bot.carryAutoDropAt) {
+        const carrier = room.players.get(bot.carriedBy);
+        endCarry(roomId, carrier || bot);
+        bot.carryAutoDropAt = 0;
+        bot.x = carrier ? carrier.x + 0.9 : bot.x;
+        bot.z = carrier ? carrier.z : bot.z;
+        bot.action = 'bow';
+        broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+        broadcast(roomId, {
+          type: 'chat',
+          id: bot.id,
+          name: bot.name,
+          jerseyNumber: bot.jerseyNumber,
+          text: `Xuống đây rồi, cảm ơn bro ${carrier ? carrier.name : ''} đã cõng nhé! Mát mẻ đỡ mỏi chân hẳn 😄`,
+          at: now
+        });
+      }
+    }
+
+    // 2. NPC chủ động tiếp cận người chơi thật và xin cõng (mỗi 50 - 85 giây một lần)
+    if (now >= (room.nextNpcCarryRequestAt || 0)) {
+      room.nextNpcCarryRequestAt = now + 50000 + Math.floor(Math.random() * 35000);
+      const freePlayers = [...room.players.values()].filter(p => !p.carryingId && !p.carriedBy && now >= p.ritualUntil && (now - (p.lastNpcCarryPromptAt || 0) > 60000));
+      const freeBots = activeAfks.filter(b => !b.carryingId && !b.carriedBy && !b.spotId);
+
+      if (freePlayers.length > 0 && freeBots.length > 0) {
+        const targetPlayer = freePlayers[Math.floor(Math.random() * freePlayers.length)];
+        const promptBot = freeBots[Math.floor(Math.random() * freeBots.length)];
+
+        // Bot tiến lại gần người chơi
+        promptBot.x = targetPlayer.x + (Math.random() < 0.5 ? 1.0 : -1.0);
+        promptBot.z = targetPlayer.z + 0.3;
+        promptBot.action = 'walk';
+        broadcast(roomId, { type: 'player-updated', player: publicPlayer(promptBot) });
+
+        const carryRequests = [
+          "Bro cõng tôi một đoạn 5-10 giây được không? Mỏi chân quá!",
+          "Cho xin ké lưng một đoạn ngắn nào bro ơi!",
+          "Cõng tôi đi dạo quanh hang ngắm cờ tí bro!",
+          "Mỏi chân quá, cho ké lưng 5-10 giây được không bro?"
+        ];
+        const reqText = carryRequests[Math.floor(Math.random() * carryRequests.length)];
+
+        targetPlayer.pendingCarryFrom = { id: promptBot.id, at: now, isNpc: true };
+        targetPlayer.lastNpcCarryPromptAt = now;
+
+        send(targetPlayer.ws, {
+          type: 'carry-invite',
+          style: 'piggyback',
+          isNpc: true,
+          from: { id: promptBot.id, name: promptBot.name, jerseyNumber: promptBot.jerseyNumber },
+          text: reqText
+        });
+
+        broadcast(roomId, {
+          type: 'chat',
+          id: promptBot.id,
+          name: promptBot.name,
+          jerseyNumber: promptBot.jerseyNumber,
+          text: `Ê bro ${targetPlayer.name}, ${reqText.toLowerCase()}`,
+          at: now
+        });
+      }
+    }
+
+    // 3. Tự động gửi tin nhắn chat chậm chậm để tạo không khí thật, nhộn nhịp (mỗi 30 - 65 giây)
+    if (now >= (room.nextAfkChatAt || 0)) {
       room.nextAfkChatAt = now + 30000 + Math.floor(Math.random() * 35000);
       const chatBot = activeAfks[Math.floor(Math.random() * activeAfks.length)];
       const quote = AFK_CHAT_QUOTES[Math.floor(Math.random() * AFK_CHAT_QUOTES.length)];
@@ -766,20 +958,38 @@ setInterval(() => {
       });
     }
 
+    // 4. Tương tác ngẫu nhiên giữa 2 NPC (chào nhau, đập tay, bắt tay, hô hào)
+    if (activeAfks.length >= 2 && Math.random() < 0.22) {
+      const freeBots = activeAfks.filter(b => !b.carryingId && !b.carriedBy && !b.spotId);
+      if (freeBots.length >= 2) {
+        const b1 = freeBots[0];
+        const b2 = freeBots[1];
+        if (Math.hypot(b1.x - b2.x, b1.z - b2.z) < 3.2) {
+          const kind = Math.random() < 0.5 ? 'highfive' : 'handshake';
+          broadcast(roomId, { type: 'interaction-started', kind, playerA: b1.id, playerB: b2.id, duration: 1500 });
+          b1.action = 'cheer';
+          b2.action = 'cheer';
+          broadcast(roomId, { type: 'player-updated', player: publicPlayer(b1) });
+          broadcast(roomId, { type: 'player-updated', player: publicPlayer(b2) });
+        }
+      }
+    }
+
+    // 5. NPC Autonomous: Di chuyển, chọn đĩa tròn ngồi/hô, đổi hành động tự nhiên
+    const occupiedSpots = getOccupiedSpotIds(room);
+
     for (let idx = 0; idx < activeAfks.length; idx++) {
       const bot = activeAfks[idx];
 
-      // Nếu người chơi thật đang cõng bot này hoặc bot đang cõng người chơi thật, không can thiệp hành động
-      if ((bot.carriedBy && room.players.has(bot.carriedBy)) || (bot.carryingId && room.players.has(bot.carryingId))) {
-        continue;
-      }
-
+      // Đang được cõng bởi người chơi thật: giữ nguyên
+      if (bot.carriedBy && room.players.has(bot.carriedBy)) continue;
+      if (bot.carryingId && room.players.has(bot.carryingId)) continue;
       if (now < bot.nextActionAt) continue;
 
-      // Mỗi bot đổi hành động ngẫu nhiên sau 15 - 35 giây (lệch pha nhau)
-      bot.nextActionAt = now + 15000 + Math.floor(Math.random() * 20000);
+      // Chu kỳ hành động ngẫu nhiên: 6 - 16 giây
+      bot.nextActionAt = now + 6000 + Math.floor(Math.random() * 10000);
 
-      // Nếu đang cõng nhau (giữa 2 bot), thỉnh thoảng thả xuống
+      // Nếu đang cõng nhau giữa 2 bot: thỉnh thoảng thả xuống
       if (bot.carryingId || bot.carriedBy) {
         if (Math.random() < 0.6) {
           const otherId = bot.carryingId || bot.carriedBy;
@@ -801,59 +1011,88 @@ setInterval(() => {
         }
       }
 
+      // A. Nếu bot đang ở trên một đĩa tròn
+      if (bot.spotId) {
+        // 45% khả năng rời đĩa tròn để đi dạo tiếp
+        if (Math.random() < 0.45) {
+          bot.spotId = null;
+          bot.action = 'walk';
+          bot.x = Math.max(-3, Math.min(3, (Math.random() - 0.5) * 5));
+          bot.z = Math.max(-6, Math.min(6, (Math.random() - 0.5) * 8));
+          broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+          setTimeout(() => {
+            if (!bot.spotId && bot.action === 'walk') {
+              bot.action = 'idle';
+              broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+            }
+          }, 2200);
+          continue;
+        } else {
+          // Vẫn ở trên đĩa tròn: luân phiên ngồi hoặc hô cổ vũ
+          bot.action = Math.random() < 0.65 ? 'cheer' : 'sit';
+          broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+          continue;
+        }
+      }
+
+      // B. Nếu bot đang tự do (không ở đĩa tròn):
       const roll = Math.random();
-      if (roll < 0.35) {
-        // Đứng yên tĩnh tâm
-        bot.action = 'idle';
-        broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
-      } else if (roll < 0.55) {
-        // Đứng hát / hô cổ vũ
-        bot.action = 'cheer';
-        broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
-      } else if (roll < 0.70) {
-        // Ngồi tĩnh tâm
-        bot.action = 'sit';
-        broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
-      } else if (roll < 0.82) {
-        // Cúi chào hoặc quỳ bái cờ
-        bot.action = Math.random() < 0.5 ? 'bow' : 'prostrate';
-        broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
-      } else if (roll < 0.93) {
-        // Di chuyển quanh quanh vị trí gốc để tạo không khí sống động
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 0.4 + Math.random() * 0.9;
-        bot.x = Math.max(-12, Math.min(12, bot.homeX + Math.cos(angle) * dist));
-        bot.z = Math.max(-16, Math.min(8, bot.homeZ + Math.sin(angle) * dist));
+
+      // 1. 25% cơ hội tìm đĩa tròn trống để vào ngồi/cổ vũ
+      if (roll < 0.25) {
+        const freeSpots = CAVE_SPOTS.filter(s => !occupiedSpots.has(s.id));
+        if (freeSpots.length > 0) {
+          const chosen = freeSpots[Math.floor(Math.random() * freeSpots.length)];
+          occupiedSpots.add(chosen.id);
+          bot.spotId = chosen.id;
+          bot.x = chosen.x;
+          bot.z = chosen.z;
+          bot.action = Math.random() < 0.6 ? 'cheer' : 'sit';
+          broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+          continue;
+        }
+      }
+
+      // 2. 40% cơ hội di chuyển tự nhiên đến các khu vực trong hang
+      if (roll < 0.65) {
+        const zones = [
+          { name: 'corridor', minX: -2.5, maxX: 2.5, minZ: -4, maxZ: 7 },    // Hành lang giữa thảm
+          { name: 'tactics',  minX: -3.8, maxX: 3.8, minZ: -9.5, maxZ: -7.5 },// Bàn chiến thuật
+          { name: 'altar',    minX: -2.8, maxX: 2.8, minZ: -15.5, maxZ: -13 }, // Đốm lửa thiêng
+          { name: 'leftAisle', minX: -5.5, maxX: -4.0, minZ: -8, maxZ: 4 },   // Hành lang cánh trái
+          { name: 'rightAisle', minX: 4.0, maxX: 5.5, minZ: -8, maxZ: 4 },    // Hành lang cánh phải
+          { name: 'entrance', minX: -2.5, maxX: 2.5, minZ: 7, maxZ: 9.5 }     // Lối vào hang
+        ];
+        const z = zones[Math.floor(Math.random() * zones.length)];
+        bot.x = z.minX + Math.random() * (z.maxX - z.minX);
+        bot.z = z.minZ + Math.random() * (z.maxZ - z.minZ);
         bot.action = 'walk';
         broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+
         setTimeout(() => {
-          if (bot.action === 'walk') {
-            bot.action = 'idle';
+          if (!bot.spotId && bot.action === 'walk') {
+            const nextActs = ['idle', 'cheer', 'bow', 'prostrate'];
+            bot.action = nextActs[Math.floor(Math.random() * nextActs.length)];
             broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
           }
         }, 2200);
-      } else {
-        // Cõng nhau giữa bot 6 và bot 7 nếu cả 2 đang rảnh
-        if (activeAfks.length >= 8) {
-          const b6 = room.afks.get(`afk-${roomId}-6`);
-          const b7 = room.afks.get(`afk-${roomId}-7`);
-          if (b6 && b7 && !b6.carryingId && !b6.carriedBy && !b7.carryingId && !b7.carriedBy) {
-            b6.x = b6.homeX; b6.z = b6.homeZ;
-            b7.x = b6.x; b7.z = b6.z;
-            b6.carryingId = b7.id;
-            b7.carriedBy = b6.id;
-            b6.action = 'idle';
-            b7.action = 'carried';
-            broadcast(roomId, { type: 'carry-started', style: 'piggyback', carrierId: b6.id, passengerId: b7.id });
-            broadcast(roomId, { type: 'player-updated', player: publicPlayer(b6) });
-            broadcast(roomId, { type: 'player-updated', player: publicPlayer(b7) });
-          }
-        }
+        continue;
       }
+
+      // 3. 20% thực hiện động tác cổ vũ hoặc quỳ bái cờ
+      if (roll < 0.85) {
+        bot.action = Math.random() < 0.6 ? 'cheer' : 'prostrate';
+        broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
+        continue;
+      }
+
+      // 4. 15% cúi chào hoặc đứng tĩnh tâm
+      bot.action = Math.random() < 0.5 ? 'bow' : 'idle';
+      broadcast(roomId, { type: 'player-updated', player: publicPlayer(bot) });
     }
   }
 
-  // 2. Inactive check (15 phút không hoạt động mới rời phòng)
+  // Inactive check (15 phút không hoạt động mới rời phòng)
   for (const [ws, s] of clients) {
     const r = rooms.get(s.roomId), p = r?.players.get(s.id);
     if (!p) continue;
@@ -871,4 +1110,4 @@ setInterval(() => {
   }
 }, 2000).unref();
 
-server.listen(PORT, () => console.log(`Hang MU running on ${PORT}; ${MAX_ROOMS} rooms x ${ROOM_CAPACITY} players (40 AFK bots distributed: 15/12/8/5)`));
+server.listen(PORT, () => console.log(`Hang MU running on ${PORT}; ${MAX_ROOMS} rooms x ${ROOM_CAPACITY} players (40 Autonomous NPCs active across 4 rooms)`));
