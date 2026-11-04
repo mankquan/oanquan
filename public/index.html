@@ -6,10 +6,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#170b0a">
   <title>HANG MU ONLINE</title>
-  <link rel="stylesheet" href="/style.css?v=21.9">
+  <link rel="stylesheet" href="/style.css?v=21.10">
 </head>
 
 <body>
+  <!-- POP-UP THÔNG BÁO 1 DÒNG TRÊN CÙNG: TRÁNH MÁY CHỦ NGỦ ĐÔNG -->
+  <aside id="topAfkBanner" class="top-afk-banner" role="status" aria-live="polite">
+    <span class="top-afk-icon">ℹ️</span>
+    <span class="top-afk-text">Web để 1-2 con afk tránh trường hợp máy chủ ngủ đông</span>
+    <button type="button" id="topAfkClose" class="top-afk-close" title="Đóng thông báo" aria-label="Đóng">×</button>
+  </aside>
   <div id="landing" class="screen">
     <div class="hero">
       <div class="crest" aria-label="Biểu tượng Hang MU"><svg class="cave-logo" viewBox="0 0 100 112" role="img"
@@ -234,7 +240,7 @@
     </div>
     <div id="toast" class="toast"></div>
   </main>
-  <script type="module" src="/client.js?v=21.13"></script>
+  <script type="module" src="/client.js?v=21.14"></script>
 </body>
 
 </html>

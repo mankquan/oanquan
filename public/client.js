@@ -27,6 +27,7 @@ function handleMessage(m) {
         });
         activeBubbles.clear();
         landing.classList.add("hidden"); game.classList.remove("hidden"); init3D(); for (const p of m.players) addPlayer(p, p.id === myId); updateCount(); if (localPlayer) { ritualActive = true; ritualStart = performance.now(); localPlayer.avatar.root.position.set(0, 0, 10); localPlayer.target.set(0, 0, 10); localPlayer.avatar.root.rotation.y = Math.PI; localPlayer.action = "walk"; if (localPlayer.carryingId || localPlayer.carriedBy) showCarryRelease(true); toast("Đang tiến đến thảm làm nghi thức nhập hang…"); }
+        showTopAfkNotice(8000);
         startBackgroundMusic();
     }
     if (m.type === "player-joined") { addPlayer(m.player, false); updateCount(); }
@@ -990,6 +991,41 @@ matchModal?.addEventListener("click", e => {
 
 matchNoticeBar?.addEventListener("click", openVictoryModal);
 hudMatchNoticeBtn?.addEventListener("click", openVictoryModal);
+
+// === POP-UP THÔNG BÁO 1 DÒNG NHỎ Ở TRÊN KHI VÀO: TRÁNH MÁY CHỦ NGỦ ĐÔNG ===
+const topAfkBanner = document.getElementById("topAfkBanner");
+const topAfkClose = document.getElementById("topAfkClose");
+let topAfkTimer = null;
+let topAfkDismissed = false;
+
+function showTopAfkNotice(durationMs = 12000) {
+    if (!topAfkBanner || topAfkDismissed) return;
+    topAfkBanner.classList.remove("hidden", "fade-out");
+    clearTimeout(topAfkTimer);
+    if (durationMs > 0) {
+        topAfkTimer = setTimeout(() => {
+            closeTopAfkNotice();
+        }, durationMs);
+    }
+}
+
+function closeTopAfkNotice() {
+    if (!topAfkBanner) return;
+    topAfkBanner.classList.add("fade-out");
+    setTimeout(() => {
+        if (topAfkBanner.classList.contains("fade-out")) {
+            topAfkBanner.classList.add("hidden");
+        }
+    }, 320);
+}
+
+topAfkClose?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    topAfkDismissed = true;
+    closeTopAfkNotice();
+});
+
+showTopAfkNotice(12000);
 
 setInterval(() => { if (localPlayer) send({ type: 'heartbeat' }); }, 15000);
 connect();
