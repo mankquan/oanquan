@@ -50,7 +50,18 @@ function handleMessage(m) {
                 p.title = m.player.title;
             }
             const wasCheering = p.action === "cheer";
-            p.target.set(m.player.x, 0, m.player.z);
+            if (p.isAfk) {
+                const tx = m.player.targetX !== undefined ? m.player.targetX : m.player.x;
+                const tz = m.player.targetZ !== undefined ? m.player.targetZ : m.player.z;
+                p.target.set(tx, 0, tz);
+                p.facingRot = m.player.facingRot !== undefined ? m.player.facingRot : null;
+                const currentDist = Math.hypot(p.avatar.root.position.x - m.player.x, p.avatar.root.position.z - m.player.z);
+                if (currentDist > 4.5) {
+                    p.avatar.root.position.set(m.player.x, m.player.spotId ? 0.18 : 0, m.player.z);
+                }
+            } else {
+                p.target.set(m.player.x, 0, m.player.z);
+            }
             if (p === localPlayer && m.player.spotId) p.avatar.root.position.set(m.player.x, 0, m.player.z);
             p.action = m.player.action;
             p.spotId = m.player.spotId || null;
@@ -216,7 +227,39 @@ function makeAvatar(name, number) {
     const nameSprite = textSprite(name.slice(0, 26), { size: 54, width: 1.6, height: .38, color: "#ffffff" }); nameSprite.position.y = 2.42; root.add(nameSprite); const titleSprite = textSprite('Fan nửa mùa', { size: 34, width: 1.5, height: .28, color: '#ffd58a' }); titleSprite.position.y = 2.12; root.add(titleSprite);
     return { root, bodyRig, arms: sleeves, legs: legPivots, headGroup, nameSprite, titleSprite, jerseyPrint };
 }
-function addPlayer(p, isLocal) { if (players.has(p.id)) return; const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7); avatar.root.position.set(p.x, 0, p.z); avatar.root.rotation.y = Math.PI; avatar.root.traverse(o => { o.userData.playerId = p.id }); scene.add(avatar.root); const entry = { id: p.id, name: p.name, title: p.title, jerseyNumber: p.jerseyNumber, isAfk: !!p.isAfk, joinedAt: p.joinedAt || Date.now(), strongFanAt: p.strongFanAt || 1050000, avatar, target: new THREE.Vector3(p.x, 0, p.z), action: p.action || "idle", spotId: p.spotId || null, carryingId: p.carryingId || null, carriedBy: p.carriedBy || null, phase: Math.random() * 6 }; players.set(p.id, entry); if (isLocal) localPlayer = entry; updateCount(); }
+function addPlayer(p, isLocal) {
+    if (players.has(p.id)) return;
+    const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7);
+    const startY = p.spotId ? 0.18 : 0;
+    avatar.root.position.set(p.x, startY, p.z);
+    const initRot = p.facingRot != null ? p.facingRot : Math.PI;
+    avatar.root.rotation.y = initRot;
+    avatar.root.traverse(o => { o.userData.playerId = p.id });
+    scene.add(avatar.root);
+    const tx = p.targetX !== undefined ? p.targetX : p.x;
+    const tz = p.targetZ !== undefined ? p.targetZ : p.z;
+    const entry = {
+        id: p.id,
+        name: p.name,
+        title: p.title,
+        jerseyNumber: p.jerseyNumber,
+        isAfk: !!p.isAfk,
+        joinedAt: p.joinedAt || Date.now(),
+        strongFanAt: p.strongFanAt || 1050000,
+        avatar,
+        target: new THREE.Vector3(tx, 0, tz),
+        facingRot: p.facingRot != null ? p.facingRot : null,
+        _speed: 0,
+        action: p.action || "idle",
+        spotId: p.spotId || null,
+        carryingId: p.carryingId || null,
+        carriedBy: p.carriedBy || null,
+        phase: Math.random() * 6
+    };
+    players.set(p.id, entry);
+    if (isLocal) localPlayer = entry;
+    updateCount();
+}
 function removePlayer(id) {
     const p = players.get(id);
     if (p) {
@@ -417,29 +460,69 @@ function animate() {
             const moveX = p.target.x - a.root.position.x;
             const moveZ = p.target.z - a.root.position.z;
             const moveDist = Math.hypot(moveX, moveZ);
-            a.root.position.lerp(p.target, .22);
-            if (p.action === "walk" && moveDist > 0.05) {
-                const targetRot = Math.atan2(moveX, moveZ);
-                a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, targetRot, 10, dt);
-            } else if (p.action === "prostrate" || p.action === "bow") {
-                // Khi quỳ bái hoặc cúi chào cờ thiêng, xoay mặt thẳng về phía cờ thiêng (hướng -Z)
+
+            if (p.isAfk) {
+                // NPC di chuyển tự nhiên bám sát sàn theo tốc độ đi bộ thực tế, có tăng giảm tốc độ mượt mà
+                if (p.action === "walk" && moveDist > 0.04) {
+                    const maxSpeed = 2.7;
+                    const targetSpeed = Math.min(maxSpeed, Math.max(0.5, moveDist * 2.5));
+                    p._speed = THREE.MathUtils.damp(p._speed || 0, targetSpeed, 6, dt);
+                    const step = Math.min(moveDist, p._speed * dt);
+                    const dirX = moveX / moveDist;
+                    const dirZ = moveZ / moveDist;
+                    a.root.position.x += dirX * step;
+                    a.root.position.z += dirZ * step;
+
+                    // Xoay người từ từ theo hướng di chuyển
+                    const targetRot = Math.atan2(dirX, dirZ);
+                    let diff = targetRot - a.root.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    a.root.rotation.y += THREE.MathUtils.damp(0, diff, 8, dt);
+                } else {
+                    p._speed = 0;
+                    if (moveDist <= 0.04) {
+                        a.root.position.x = p.target.x;
+                        a.root.position.z = p.target.z;
+                    }
+                    // Nếu đang chào hoặc dừng lại nhìn ai đó, xoay người nhìn thẳng vào họ
+                    if (p.facingRot != null) {
+                        let diff = p.facingRot - a.root.rotation.y;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+                        a.root.rotation.y += THREE.MathUtils.damp(0, diff, 8, dt);
+                    }
+                }
+            } else {
+                // Người chơi thật: lerp bù trễ gói tin 90ms
+                a.root.position.lerp(p.target, .22);
+                if (p.action === "walk" && moveDist > 0.05) {
+                    const targetRot = Math.atan2(moveX, moveZ);
+                    a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, targetRot, 10, dt);
+                }
+            }
+
+            // Xoay mặt thẳng về phía cờ thiêng khi quỳ bái trước thảm cờ thiêng (0, 2.0)
+            if (p.action === "prostrate" && Math.abs(a.root.position.z - 2.0) < 1.5 && Math.abs(a.root.position.x) < 1.5) {
                 a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, Math.PI, 10, dt);
             }
         }
         const interaction = [...activeInteractions.values()].find(v => (v.a === p.id || v.b === p.id) && v.until > performance.now()); const cheering = active === "cheer", bowing = active === "bow", walking = active === "walk", prostrating = active === "prostrate", standingSpot = active === "sit", carried = active === "carried";
-        // A low, stable kneeling bow: legs fold first, torso lowers from the hips.
-        const pose = prostrating ? 1 : bowing ? .48 : 0;
+        // Cúi chào (bow) cúi người gập eo từ hông (0.52), hạ trọng tâm (0.76) và đầu cúi xuống (0.25)
+        const isWalkingActive = walking && (!p.isAfk || (p._speed && p._speed > 0.15) || (p === localPlayer));
         a.bodyRig.rotation.x = THREE.MathUtils.damp(a.bodyRig.rotation.x, carried ? -.28 : prostrating ? 1.05 : bowing ? .52 : 0, 8, dt);
         a.bodyRig.position.y = THREE.MathUtils.damp(a.bodyRig.position.y, prostrating ? .48 : bowing ? .76 : .82, 8, dt);
-        a.legs[0].hip.rotation.x = THREE.MathUtils.damp(a.legs[0].hip.rotation.x, carried ? -.85 : prostrating ? -1.15 : walking ? Math.sin(now * 10 + p.phase) * .25 : 0, 9, dt);
-        a.legs[1].hip.rotation.x = THREE.MathUtils.damp(a.legs[1].hip.rotation.x, carried ? -.85 : prostrating ? -1.15 : walking ? Math.sin(now * 10 + p.phase + Math.PI) * .25 : 0, 9, dt);
+        a.legs[0].hip.rotation.x = THREE.MathUtils.damp(a.legs[0].hip.rotation.x, carried ? -.85 : prostrating ? -1.15 : isWalkingActive ? Math.sin(now * 10 + p.phase) * .25 : 0, 9, dt);
+        a.legs[1].hip.rotation.x = THREE.MathUtils.damp(a.legs[1].hip.rotation.x, carried ? -.85 : prostrating ? -1.15 : isWalkingActive ? Math.sin(now * 10 + p.phase + Math.PI) * .25 : 0, 9, dt);
         for (const leg of a.legs) leg.knee.rotation.x = THREE.MathUtils.damp(leg.knee.rotation.x, carried ? 1.25 : prostrating ? 1.45 : 0, 9, dt);
         a.arms[0].rotation.z = THREE.MathUtils.damp(a.arms[0].rotation.z, interaction ? (interaction.kind === "highfive" ? (interaction.a === p.id ? 2.8 : -2.8) : interaction.kind === "handshake" ? (interaction.a === p.id ? -.7 : .7) : 1.35) : carried ? .48 : cheering ? 2.55 : prostrating ? -.28 : 0, 10, dt);
         a.arms[1].rotation.z = THREE.MathUtils.damp(a.arms[1].rotation.z, interaction ? (interaction.kind === "highfive" ? (interaction.a === p.id ? -.3 : .3) : interaction.kind === "handshake" ? (interaction.a === p.id ? .7 : -.7) : -1.35) : carried ? -.48 : cheering ? -2.55 : prostrating ? .28 : 0, 10, dt);
         a.arms[0].rotation.x = a.arms[1].rotation.x = cheering ? Math.sin(now * 8 + p.phase) * .16 : prostrating ? -.5 : 0;
         a.headGroup.rotation.x = THREE.MathUtils.damp(a.headGroup.rotation.x, prostrating ? .45 : bowing ? .25 : 0, 9, dt);
         if (p === localPlayer && isJumping) { jumpHeight += jumpVelocity * dt; jumpVelocity -= JUMP_GRAVITY * dt; if (jumpHeight <= 0) { jumpHeight = 0; jumpVelocity = 0; isJumping = false; if (localPlayer.action === "jump") localPlayer.action = "idle"; } }
-        a.root.position.y = (cheering ? Math.abs(Math.sin(now * 8 + p.phase)) * .1 : 0) + (p === localPlayer ? jumpHeight : 0);
+        // Chiều cao y bám sàn: nếu ở trên đĩa tròn (spotId) là 0.18, trên sàn là 0
+        const baseY = p.spotId ? 0.18 : 0;
+        a.root.position.y = baseY + (cheering ? Math.abs(Math.sin(now * 8 + p.phase)) * .08 : 0) + (p === localPlayer ? jumpHeight : 0);
         if (p.spotId) { const pad = seatSpots.get(p.spotId); if (pad) pad.material = spotMaterials.taken; }
     }
     if (localPlayer) {
