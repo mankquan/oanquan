@@ -19,12 +19,12 @@ function handleMessage(m) {
     if (m.type === "room-list") renderRooms(m.rooms);
     if (m.type === "join-error") { toast(m.message || "Tên hiển thị không hợp lệ."); $("#nameHint").textContent = m.message || "Hãy chọn tên khác."; $("#nameHint").classList.add("invalid"); }
     if (m.type === "joined") {
-        myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.realCount !== undefined ? m.realCount : m.players.filter(p => !p.isAfk).length;
+        myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.totalCount || m.players.length;
         landing.classList.add("hidden"); game.classList.remove("hidden"); init3D(); for (const p of m.players) addPlayer(p, p.id === myId); if (localPlayer) { ritualActive = true; ritualStart = performance.now(); localPlayer.avatar.root.position.set(0, 0, 10); localPlayer.target.set(0, 0, 10); localPlayer.avatar.root.rotation.y = Math.PI; localPlayer.action = "walk"; if (localPlayer.carryingId || localPlayer.carriedBy) showCarryRelease(true); toast("Đang tiến đến thảm làm nghi thức nhập hang…"); }
         startBackgroundMusic();
     }
-    if (m.type === "player-joined") { addPlayer(m.player, false); if (!m.player.isAfk) updateCount(1); }
-    if (m.type === "player-left") { removePlayer(m.id); if (!m.isAfk) updateCount(-1); _rebuildSeatPanelIfOpen(); }
+    if (m.type === "player-joined") { addPlayer(m.player, false); updateCount(); }
+    if (m.type === "player-left") { removePlayer(m.id); updateCount(); _rebuildSeatPanelIfOpen(); }
     if (m.type === "player-updated") { const p = players.get(m.player.id); if (p) { const wasCheering = p.action === "cheer"; p.target.set(m.player.x, 0, m.player.z); if (p === localPlayer && m.player.spotId) p.avatar.root.position.set(m.player.x, 0, m.player.z); p.action = m.player.action; p.spotId = m.player.spotId || null; p.carryingId = m.player.carryingId || null; p.carriedBy = m.player.carriedBy || null; if (p === localPlayer && p.spotId && p.action === "cheer" && !wasCheering) playCheerAudio(); } _rebuildSeatPanelIfOpen(); }
     if (m.type === "carry-invite") { showCarryInvite(m.from); }
     if (m.type === "carry-pending") toast(`Đã gửi lời mời cõng ${m.targetName}.`);
@@ -56,7 +56,7 @@ function renderRooms(rooms) {
 function applyHangMode(mode, by, mood) { const fallback = { normal: { title: 'HANG ĐANG YÊN ẮNG', text: 'MU đang trong tình trạng khá tồi tệ… nhưng anh em vẫn còn đây.', icon: '🕯️' }, gloomy: { title: 'MU ĐANG TRONG TÌNH TRẠNG KHÁ TỒI TỆ', text: 'Xin giữ bình tĩnh. Ban quản lý hang chưa có phát ngôn.', icon: '🥀' }, crisis: { title: 'KHỦNG HOẢNG TINH THẦN', text: 'Đề nghị các thành viên không nhìn thẳng vào bảng tin.', icon: '🚨' }, despair: { title: 'TUYỆT VỌNG TOÀN TẬP', text: 'Chỉ còn ánh lửa và tình đồng đội.', icon: '🫠' } }; const v = mood || fallback[mode] || fallback.gloomy; $('#hangMoodIcon').textContent = v.icon; $('#hangMoodTitle').textContent = v.title; $('#hangMoodText').textContent = v.text; }
 function showHangEvent(message) { const el = $('#hangEventBanner'); el.textContent = message; el.classList.remove('hidden'); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => el.classList.add('hidden'), 4200) }
 
-function updateCount(n) { $("#onlineCount").textContent = Math.max(0, Number($("#onlineCount").textContent) + n) }
+function updateCount() { $("#onlineCount").textContent = players.size; }
 function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 1800) }
 function textSprite(text, opts = {}) {
     const c = document.createElement("canvas"); c.width = 512; c.height = 128; const x = c.getContext("2d"); x.clearRect(0, 0, 512, 128);
@@ -153,12 +153,22 @@ function createTacticsDisplay() {
     const left = -fieldW / 2, right = fieldW / 2, near = centerZ - fieldD / 2, far = centerZ + fieldD / 2;
     line(0, near, fieldW, .025); line(0, far, fieldW, .025); line(left, centerZ, .025, fieldD); line(right, centerZ, .025, fieldD); line(0, centerZ, .025, fieldD);
     const circle = new THREE.Mesh(new THREE.TorusGeometry(.38, .012, 6, 40), lineMat); circle.rotation.x = Math.PI / 2; circle.position.set(0, topY + .03, centerZ); scene.add(circle);
-    // Đội hình 4-4-2 kinh điển, bố trí hai bên đối xứng trên mặt sân thu nhỏ.
+    // Đội hình 4-4-2 kinh điển: Toàn bộ 11 cầu thủ ĐỎ MU bên sân trái (x < 0), toàn bộ 11 cầu thủ XANH bên sân phải (x > 0)
     const sx = fieldW / 10.5, sz = fieldD / 7.1;
-    const mu = [[-4.55, 0], [-3.25, -2.45], [-3.25, -.82], [-3.25, .82], [-3.25, 2.45], [-1.45, -2.45], [-1.45, -.82], [-1.45, .82], [-1.45, 2.45], [1.15, -.85], [1.15, .85]];
-    const opp = [[4.55, 0], [3.25, -2.45], [3.25, -.82], [3.25, .82], [3.25, 2.45], [1.45, -2.45], [1.45, -.82], [1.45, .82], [1.45, 2.45], [-1.15, -.85], [-1.15, .85]];
+    const mu = [
+        [-4.55, 0],                                                   // Thủ môn
+        [-3.25, -2.45], [-3.25, -.82], [-3.25, .82], [-3.25, 2.45], // Hậu vệ
+        [-1.95, -2.35], [-1.95, -.78], [-1.95, .78], [-1.95, 2.35], // Tiền vệ
+        [-0.72, -.85],  [-0.72, .85]                                 // Tiền đạo (x < 0, hoàn toàn bên phần sân MU)
+    ];
+    const opp = [
+        [4.55, 0],                                                   // Thủ môn
+        [3.25, -2.45],  [3.25, -.82],  [3.25, .82],  [3.25, 2.45],  // Hậu vệ
+        [1.95, -2.35],  [1.95, -.78],  [1.95, .78],  [1.95, 2.35],  // Tiền vệ
+        [0.72, -.85],   [0.72, .85]                                  // Tiền đạo (x > 0, hoàn toàn bên phần sân ĐỐI THỦ)
+    ];
     function miniAt(v, color, num, rot) { const g = createMiniPlayer(v[0] * sx, centerZ + v[1] * sz, color, num, rot); g.scale.setScalar(.55); g.position.y = topY + .04; return g; }
-    // Tạo riêng 11 áo đỏ và 11 áo xanh; không dùng chung vị trí hoặc màu ở bất kỳ cầu thủ nào.
+    // 11 áo đỏ MU bên trái và 11 áo xanh đối thủ bên phải, tuyệt đối không bị lẫn màu sang sân nhau
     mu.forEach((v, i) => miniAt(v, 0xc8102e, i + 1, Math.PI));
     opp.forEach((v, i) => miniAt(v, 0x174ea6, i + 1, 0));
     // Trọng tài ở vòng tròn giữa sân, có còi bạc trước miệng.
@@ -249,10 +259,6 @@ function onSpotPointer(event) {
         while (obj && !obj.userData.playerId) obj = obj.parent;
         const target = obj && players.get(obj.userData.playerId);
         if (target) {
-            if (target.isAfk) {
-                toast(`“${target.name}” đang tĩnh tâm trong hang!`);
-                return;
-            }
             markActivity();
             showCarryMenu(target, event.clientX, event.clientY);
             return;
