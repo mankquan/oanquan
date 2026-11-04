@@ -28,7 +28,6 @@ app.get('/audio/1.m4a', (req, res) => serveAudio('public/audio/1.m4a', 'audio/mp
 app.get('/audio/1.mp4a', (req, res) => serveAudio('public/audio/1.m4a', 'audio/mp4', res));
 app.get('/audio/2.mp3', (req, res) => serveAudio('public/audio/2.mp3', 'audio/mpeg', res));
 app.get('/audio/2.m4a', (req, res) => serveAudio('public/audio/2.m4a', 'audio/mp4', res));
-app.get('/audio/2.mp4a', (req, res) => serveAudio('public/audio/2.m4a', 'audio/mp4', res));
 
 app.use(express.static('public'));
 
@@ -51,7 +50,7 @@ const AFK_NAMES = [
   "Gà Mờ", "Bố Đời", "Trùm Cuối", "Vua Báo", "Hết Pin"
 ];
 
-// 10 Vị trí đứng/ngồi/cõng phân bố hợp lý trong hang (không chặn lối đi, không đè lên đĩa tròn của người chơi)
+// 15 Vị trí đứng/ngồi/cõng phân bố hợp lý trong hang (không chặn lối đi, không đè lên đĩa tròn của người chơi)
 const AFK_SPOTS = [
   { x: -3.2, z: -8.0, action: 'cheer' },     // 0: Trái bàn chiến thuật - Đứng hát / cổ vũ
   { x:  3.2, z: -8.0, action: 'idle' },      // 1: Phải bàn chiến thuật - Đứng xem
@@ -62,7 +61,12 @@ const AFK_SPOTS = [
   { x: -3.6, z:  6.0, action: 'idle' },      // 6: Cõng bạn (carrier)
   { x: -3.6, z:  6.0, action: 'carried' },   // 7: Được cõng trên lưng (passenger)
   { x:  3.6, z:  6.0, action: 'prostrate' }, // 8: Quỳ dập đầu bái cờ
-  { x: -1.8, z: -14.5, action: 'cheer' }     // 9: Gần đốm lửa thiêng - Hô cổ vũ
+  { x: -1.8, z: -14.5, action: 'cheer' },    // 9: Gần đốm lửa thiêng trái - Hô cổ vũ
+  { x:  1.8, z: -14.5, action: 'bow' },      // 10: Gần đốm lửa thiêng phải - Cúi chào trước lửa
+  { x: -1.6, z:  8.5, action: 'cheer' },     // 11: Lối vào hang bên trái - Cổ vũ đón anh em
+  { x:  1.6, z:  8.5, action: 'idle' },      // 12: Lối vào hang bên phải - Đứng đón anh em
+  { x: -4.5, z: -11.5, action: 'prostrate' },// 13: Hành lang trên bên trái - Quỳ bái
+  { x:  4.5, z: -11.5, action: 'sit' }       // 14: Hành lang trên bên phải - Ngồi tĩnh tâm
 ];
 
 const rooms = new Map();
@@ -80,18 +84,31 @@ const MOODS = {
 
 const serverStartTime = Date.now();
 
-// Khởi tạo 4 phòng, mỗi phòng đúng 10 nhân vật AFK cố định
-for (let i = 1; i <= MAX_ROOMS; i++) {
-  const roomId = `hang-${String(i).padStart(2, '0')}`;
+// Phân bổ 40 nhân vật AFK hoàn toàn phía server qua 4 phòng:
+// Phòng 1 (Hang chính/VIP): 15 AFK (đông đúc, khí thế nhất)
+// Phòng 2 (Hang sôi động): 12 AFK
+// Phòng 3 (Hang vừa phải): 8 AFK
+// Phòng 4 (Hang tĩnh tâm): 5 AFK
+// Tổng cộng: 15 + 12 + 8 + 5 = đúng 40 AFK với 40 tên khác nhau không trùng lặp
+const ROOM_AFK_CONFIG = [
+  { id: 'hang-01', count: 15 },
+  { id: 'hang-02', count: 12 },
+  { id: 'hang-03', count: 8 },
+  { id: 'hang-04', count: 5 }
+];
+
+let globalNameIndex = 0;
+for (const cfg of ROOM_AFK_CONFIG) {
+  const roomId = cfg.id;
+  const afkCount = cfg.count;
   const room = {
     players: new Map(), // Danh sách người chơi thật có WebSocket
-    afks: new Map(),    // 10 AFK cố định của phòng
+    afks: new Map(),    // AFK cố định phía server của phòng
     afkList: []         // Thứ tự danh sách AFK
   };
 
-  for (let j = 0; j < 10; j++) {
-    const nameIndex = (i - 1) * 10 + j;
-    const name = AFK_NAMES[nameIndex];
+  for (let j = 0; j < afkCount; j++) {
+    const name = AFK_NAMES[globalNameIndex++];
     const spot = AFK_SPOTS[j];
     const id = `afk-${roomId}-${j}`;
     const bot = {
@@ -114,12 +131,14 @@ for (let i = 1; i <= MAX_ROOMS; i++) {
     room.afkList.push(bot);
   }
 
-  // Khởi tạo cặp cõng nhau giữa bot 6 và bot 7 tạo không khí
-  const b6 = room.afks.get(`afk-${roomId}-6`);
-  const b7 = room.afks.get(`afk-${roomId}-7`);
-  if (b6 && b7) {
-    b6.carryingId = b7.id;
-    b7.carriedBy = b6.id;
+  // Khởi tạo cặp cõng nhau giữa bot 6 và bot 7 tạo không khí (cho các phòng có đủ từ 8 bot trở lên)
+  if (afkCount >= 8) {
+    const b6 = room.afks.get(`afk-${roomId}-6`);
+    const b7 = room.afks.get(`afk-${roomId}-7`);
+    if (b6 && b7) {
+      b6.carryingId = b7.id;
+      b7.carriedBy = b6.id;
+    }
   }
 
   rooms.set(roomId, room);
@@ -140,11 +159,12 @@ function inappropriateName(name) {
   return bannedTerms.some(w => n.split(/[^a-z0-9]+/).includes(w));
 }
 
-// Số lượng người chơi thật hiển thị trên danh sách phòng (chỉ tính người thật)
+// Số lượng người tham gia hiển thị trên danh sách phòng (bao gồm cả các thành viên AFK để sảnh đông vui, đẹp mắt)
 function roomSnapshot() {
   return [...rooms.entries()].map(([id, r]) => ({
     id,
-    count: r.players.size,
+    count: r.players.size + getActiveAfks(r).length,
+    realCount: r.players.size,
     capacity: ROOM_CAPACITY
   }));
 }
@@ -187,10 +207,11 @@ function publicPlayer(p) {
   };
 }
 
-// Lấy danh sách AFK đang hoạt động (khi phòng tầm 30 người, mỗi người vào thì 1 AFK nhường chỗ)
+// Lấy danh sách AFK đang hoạt động (khi phòng tầm 30 người, cứ mỗi người vào thì 1 AFK nhường chỗ)
 function getActiveAfks(room) {
   const realCount = room.players.size;
-  const targetCount = realCount >= 30 ? Math.max(0, 40 - realCount) : 10;
+  const maxAfk = room.afkList.length;
+  const targetCount = realCount >= 30 ? Math.max(0, maxAfk - (realCount - 30)) : maxAfk;
   return room.afkList.slice(0, targetCount);
 }
 
@@ -253,8 +274,9 @@ function removePlayer(ws, reason = 'disconnect') {
 
     // Khi người chơi thật giảm xuống, AFK quay trở lại phòng
     if (prevReal > 30) {
-      const prevAfkCount = Math.max(0, 40 - prevReal);
-      const newAfkCount = Math.max(0, 40 - (prevReal - 1));
+      const maxAfk = r.afkList.length;
+      const prevAfkCount = Math.max(0, maxAfk - (prevReal - 30));
+      const newAfkCount = Math.max(0, maxAfk - ((prevReal - 1) - 30));
       if (newAfkCount > prevAfkCount && r.afkList[prevAfkCount]) {
         const returningAfk = r.afkList[prevAfkCount];
         broadcast(s.roomId, { type: 'player-joined', player: publicPlayer(returningAfk) });
@@ -336,8 +358,9 @@ wss.on('connection', ws => {
 
       // Nếu số người thật >= 30, mỗi người vào thêm làm 1 AFK nhường chỗ
       if (prevReal >= 30) {
-        const prevAfkCount = Math.max(0, 40 - prevReal);
-        const newAfkCount = Math.max(0, 40 - (prevReal + 1));
+        const maxAfk = room.afkList.length;
+        const prevAfkCount = Math.max(0, maxAfk - (prevReal - 30));
+        const newAfkCount = Math.max(0, maxAfk - ((prevReal + 1) - 30));
         if (newAfkCount < prevAfkCount && room.afkList[newAfkCount]) {
           const yieldingAfk = room.afkList[newAfkCount];
           broadcast(roomId, { type: 'player-left', id: yieldingAfk.id, isAfk: true, reason: 'afk-room-yield' });
@@ -745,4 +768,4 @@ setInterval(() => {
   }
 }, 2000).unref();
 
-server.listen(PORT, () => console.log(`Hang MU running on ${PORT}; ${MAX_ROOMS} rooms x ${ROOM_CAPACITY} players (40 AFK bots ready)`));
+server.listen(PORT, () => console.log(`Hang MU running on ${PORT}; ${MAX_ROOMS} rooms x ${ROOM_CAPACITY} players (40 AFK bots distributed: 15/12/8/5)`));
