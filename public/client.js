@@ -20,12 +20,46 @@ function handleMessage(m) {
     if (m.type === "join-error") { toast(m.message || "Tên hiển thị không hợp lệ."); $("#nameHint").textContent = m.message || "Hãy chọn tên khác."; $("#nameHint").classList.add("invalid"); }
     if (m.type === "joined") {
         myId = m.id; roomId = m.roomId; capacity = m.capacity; if (m.hangMode) applyHangMode(m.hangMode, m.by, m.mood); $("#roomLabel").textContent = roomId.toUpperCase(); $("#capacity").textContent = capacity; $("#onlineCount").textContent = m.totalCount || m.players.length;
+        activeBubbles.forEach(b => {
+            clearTimeout(b.timer);
+            clearTimeout(b.fadeTimer);
+            if (b.el) b.el.remove();
+        });
+        activeBubbles.clear();
         landing.classList.add("hidden"); game.classList.remove("hidden"); init3D(); for (const p of m.players) addPlayer(p, p.id === myId); updateCount(); if (localPlayer) { ritualActive = true; ritualStart = performance.now(); localPlayer.avatar.root.position.set(0, 0, 10); localPlayer.target.set(0, 0, 10); localPlayer.avatar.root.rotation.y = Math.PI; localPlayer.action = "walk"; if (localPlayer.carryingId || localPlayer.carriedBy) showCarryRelease(true); toast("Đang tiến đến thảm làm nghi thức nhập hang…"); }
         startBackgroundMusic();
     }
     if (m.type === "player-joined") { addPlayer(m.player, false); updateCount(); }
     if (m.type === "player-left") { removePlayer(m.id); updateCount(); _rebuildSeatPanelIfOpen(); }
-    if (m.type === "player-updated") { const p = players.get(m.player.id); if (p) { const wasCheering = p.action === "cheer"; p.target.set(m.player.x, 0, m.player.z); if (p === localPlayer && m.player.spotId) p.avatar.root.position.set(m.player.x, 0, m.player.z); p.action = m.player.action; p.spotId = m.player.spotId || null; p.carryingId = m.player.carryingId || null; p.carriedBy = m.player.carriedBy || null; if (p === localPlayer && p.spotId && p.action === "cheer" && !wasCheering) playCheerAudio(); } _rebuildSeatPanelIfOpen(); }
+    if (m.type === "player-updated") {
+        const p = players.get(m.player.id);
+        if (p) {
+            // Tự động cập nhật nhãn tên 3D khi NPC được đổi tên theo chu kỳ
+            if (m.player.name && m.player.name !== p.name) {
+                p.name = m.player.name;
+                if (p.avatar && p.avatar.nameSprite) {
+                    p.avatar.nameSprite.material.map?.dispose();
+                    p.avatar.nameSprite.material.dispose();
+                    p.avatar.root.remove(p.avatar.nameSprite);
+                    p.avatar.nameSprite = textSprite(p.name.slice(0, 26), { size: 54, width: 1.6, height: .38, color: "#ffffff" });
+                    p.avatar.nameSprite.position.y = 2.42;
+                    p.avatar.root.add(p.avatar.nameSprite);
+                }
+            }
+            if (m.player.title && m.player.title !== p.title) {
+                p.title = m.player.title;
+            }
+            const wasCheering = p.action === "cheer";
+            p.target.set(m.player.x, 0, m.player.z);
+            if (p === localPlayer && m.player.spotId) p.avatar.root.position.set(m.player.x, 0, m.player.z);
+            p.action = m.player.action;
+            p.spotId = m.player.spotId || null;
+            p.carryingId = m.player.carryingId || null;
+            p.carriedBy = m.player.carriedBy || null;
+            if (p === localPlayer && p.spotId && p.action === "cheer" && !wasCheering) playCheerAudio();
+        }
+        _rebuildSeatPanelIfOpen();
+    }
     if (m.type === "carry-invite") { showCarryInvite(m.from, m.text); }
     if (m.type === "carry-pending") toast(`Đã gửi lời mời cõng ${m.targetName}.`);
     if (m.type === "carry-declined") toast(`${m.targetName} đã từ chối lời mời cõng.`);
@@ -58,106 +92,73 @@ function showHangEvent(message) { const el = $('#hangEventBanner'); el.textConte
 
 function updateCount() { $("#onlineCount").textContent = players.size; }
 function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 1800) }
+
+// === QUẢN LÝ BONG BÓNG THOẠI HTML 3D CHIẾU LÊN MÀN HÌNH (CAMERA PROJECTED) ===
+const activeBubbles = new Map(); // playerId -> { el, timer, fadeTimer }
+const _bubblePos = new THREE.Vector3();
+
 function showSpeechBubble(playerId, text) {
     const p = players.get(playerId);
-    if (!p || !p.avatar) return;
-    if (p._bubbleSprite) {
-        p.avatar.root.remove(p._bubbleSprite);
-        p._bubbleSprite.material.map?.dispose();
-        p._bubbleSprite.material.dispose();
-        p._bubbleSprite = null;
-    }
-    clearTimeout(p._bubbleTimer);
-
+    if (!p) return;
     const cleanText = String(text || '').trim();
     if (!cleanText) return;
 
-    // Giới hạn độ dài để bong bóng luôn gọn đẹp, không bị tràn màn hình
-    const displayText = cleanText.length > 38 ? cleanText.slice(0, 36) + '…' : cleanText;
+    let b = activeBubbles.get(playerId);
+    if (b) {
+        clearTimeout(b.timer);
+        clearTimeout(b.fadeTimer);
+        b.el.classList.remove('fade-out');
+        const contentSpan = b.el.querySelector('.bubble-content');
+        if (contentSpan) contentSpan.textContent = cleanText;
+    } else {
+        const layer = document.getElementById('bubbleLayer');
+        if (!layer) return;
+        const el = document.createElement('div');
+        el.className = 'speech-bubble';
+        el.dataset.playerId = playerId;
+        const content = document.createElement('span');
+        content.className = 'bubble-content';
+        content.textContent = cleanText;
+        const tail = document.createElement('div');
+        tail.className = 'bubble-tail';
+        el.appendChild(content);
+        el.appendChild(tail);
+        layer.appendChild(el);
+        b = { el };
+        activeBubbles.set(playerId, b);
+    }
 
-    const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 160;
-    const ctx = c.getContext("2d");
+    // Tự động mờ dần ở 3.5s và gỡ hoàn toàn sau 3.8s (trong khoảng 3 - 5 giây chuẩn)
+    b.fadeTimer = setTimeout(() => {
+        if (b && b.el) b.el.classList.add('fade-out');
+    }, 3500);
 
-    // Đo độ rộng chữ để tạo khung bóng thoại co giãn tự nhiên
-    ctx.font = "bold 32px 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif";
-    const textMetrics = ctx.measureText(displayText);
-    const textWidth = Math.min(470, Math.max(140, textMetrics.width + 52));
-    const bubbleX = (512 - textWidth) / 2;
-    const bubbleY = 14;
-    const bubbleH = 92;
-    const cornerRadius = 20;
-
-    // Bóng đổ nhẹ cho bong bóng thoại nổi bật
-    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 4;
-
-    // Nền bong bóng thoại: tone tối sang trọng, tương phản cao, dễ nhìn cả ngày lẫn đêm
-    ctx.fillStyle = "rgba(18, 10, 8, 0.94)";
-    ctx.beginPath();
-    ctx.roundRect(bubbleX, bubbleY, textWidth, bubbleH, cornerRadius);
-    ctx.fill();
-
-    // Viền vàng kim tinh tế
-    ctx.shadowColor = "transparent";
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "#eeb93a";
-    ctx.stroke();
-
-    // Mũi nhọn đuôi bong bóng thoại chỉ thẳng xuống đỉnh đầu nhân vật
-    ctx.fillStyle = "rgba(18, 10, 8, 0.94)";
-    ctx.beginPath();
-    ctx.moveTo(256 - 14, bubbleY + bubbleH - 1);
-    ctx.lineTo(256, bubbleY + bubbleH + 26);
-    ctx.lineTo(256 + 14, bubbleY + bubbleH - 1);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = "#eeb93a";
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(256 - 14, bubbleY + bubbleH);
-    ctx.lineTo(256, bubbleY + bubbleH + 26);
-    ctx.lineTo(256 + 14, bubbleY + bubbleH);
-    ctx.stroke();
-
-    // Text chữ trắng ngà sắc nét, căn giữa
-    ctx.fillStyle = "#fff8e7";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = "bold 30px 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif";
-    ctx.fillText(displayText, 256, bubbleY + bubbleH / 2);
-
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    const spriteMat = new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false });
-    const sprite = new THREE.Sprite(spriteMat);
-
-    // Kích thước sprite tự co giãn theo chiều dài chữ
-    const aspectW = Math.max(1.85, (textWidth / 512) * 3.3);
-    sprite.scale.set(aspectW, aspectW * (160 / 512), 1);
-    // Vị trí nằm ngay phía trên đầu & trên cả nhãn tên
-    sprite.position.set(0, 2.95, 0);
-
-    p.avatar.root.add(sprite);
-    p._bubbleSprite = sprite;
-
-    // Tự động biến mất sau 3.8 giây (trong khoảng 3 - 5 giây chuẩn yêu cầu)
-    p._bubbleTimer = setTimeout(() => {
-        if (p._bubbleSprite) {
-            p.avatar.root.remove(p._bubbleSprite);
-            p._bubbleSprite.material.map?.dispose();
-            p._bubbleSprite.material.dispose();
-            p._bubbleSprite = null;
-        }
+    b.timer = setTimeout(() => {
+        if (b && b.el) b.el.remove();
+        activeBubbles.delete(playerId);
     }, 3800);
 }
 function textSprite(text, opts = {}) {
-    const c = document.createElement("canvas"); c.width = 512; c.height = 128; const x = c.getContext("2d"); x.clearRect(0, 0, 512, 128);
-    x.font = `900 ${opts.size || 64}px system-ui,sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.lineWidth = 12; x.strokeStyle = "#210908"; x.strokeText(text, 256, 64); x.fillStyle = opts.color || "#fff2cf"; x.fillText(text, 256, 64);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); s.scale.set(opts.width || 1.5, opts.height || .38, 1); return s;
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 128;
+    const x = c.getContext("2d");
+    x.clearRect(0, 0, 512, 128);
+    const cleanStr = String(text || '');
+    const fontSize = opts.size || (cleanStr.length > 20 ? 38 : cleanStr.length > 15 ? 44 : 54);
+    x.font = `900 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    x.lineWidth = 12;
+    x.strokeStyle = "#210908";
+    x.strokeText(cleanStr, 256, 64);
+    x.fillStyle = opts.color || "#fff2cf";
+    x.fillText(cleanStr, 256, 64);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
+    s.scale.set(opts.width || 1.6, opts.height || .38, 1);
+    return s;
 }
 function makeAvatar(name, number) {
     const root = new THREE.Group(), bodyRig = new THREE.Group(); root.add(bodyRig);
@@ -212,13 +213,20 @@ function makeAvatar(name, number) {
     // Separate hinged legs and chunky boots make kneeling readable.
     const legPivots = []; for (const x of [-.145, .145]) { const hip = new THREE.Group(); hip.position.set(x, .75, 0); root.add(hip); const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(.105, .24, 4, 10), black); thigh.position.y = -.16; hip.add(thigh); const knee = new THREE.Group(); knee.position.y = -.29; hip.add(knee); const shin = new THREE.Mesh(new THREE.CapsuleGeometry(.09, .2, 4, 10), black); shin.position.y = -.12; knee.add(shin); const boot = new THREE.Mesh(new THREE.BoxGeometry(.19, .12, .31), black); boot.position.set(0, -.25, .075); knee.add(boot); legPivots.push({ hip, knee }) }
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(.43, 24), new THREE.MeshBasicMaterial({ color: 0x080504, transparent: true, opacity: .32 })); shadow.rotation.x = -Math.PI / 2; shadow.position.y = .012; root.add(shadow);
-    const nameSprite = textSprite(name.slice(0, 18), { size: 54, width: 1.55, height: .38, color: "#ffffff" }); nameSprite.position.y = 2.42; root.add(nameSprite); const titleSprite = textSprite('Fan nửa mùa', { size: 34, width: 1.5, height: .28, color: '#ffd58a' }); titleSprite.position.y = 2.12; root.add(titleSprite);
+    const nameSprite = textSprite(name.slice(0, 26), { size: 54, width: 1.6, height: .38, color: "#ffffff" }); nameSprite.position.y = 2.42; root.add(nameSprite); const titleSprite = textSprite('Fan nửa mùa', { size: 34, width: 1.5, height: .28, color: '#ffd58a' }); titleSprite.position.y = 2.12; root.add(titleSprite);
     return { root, bodyRig, arms: sleeves, legs: legPivots, headGroup, nameSprite, titleSprite, jerseyPrint };
 }
 function addPlayer(p, isLocal) { if (players.has(p.id)) return; const avatar = makeAvatar(p.name, p.jerseyNumber ?? 7); avatar.root.position.set(p.x, 0, p.z); avatar.root.rotation.y = Math.PI; avatar.root.traverse(o => { o.userData.playerId = p.id }); scene.add(avatar.root); const entry = { id: p.id, name: p.name, title: p.title, jerseyNumber: p.jerseyNumber, isAfk: !!p.isAfk, joinedAt: p.joinedAt || Date.now(), strongFanAt: p.strongFanAt || 1050000, avatar, target: new THREE.Vector3(p.x, 0, p.z), action: p.action || "idle", spotId: p.spotId || null, carryingId: p.carryingId || null, carriedBy: p.carriedBy || null, phase: Math.random() * 6 }; players.set(p.id, entry); if (isLocal) localPlayer = entry; updateCount(); }
 function removePlayer(id) {
     const p = players.get(id);
     if (p) {
+        const b = activeBubbles.get(id);
+        if (b) {
+            clearTimeout(b.timer);
+            clearTimeout(b.fadeTimer);
+            if (b.el) b.el.remove();
+            activeBubbles.delete(id);
+        }
         if (p._bubbleTimer) clearTimeout(p._bubbleTimer);
         if (p._bubbleSprite) {
             p.avatar.root.remove(p._bubbleSprite);
@@ -405,7 +413,19 @@ function animate() {
             a.root.add(a.titleSprite);
             p._shownTitle = fanTitle;
         }
-        if (p !== localPlayer) a.root.position.lerp(p.target, .22);
+        if (p !== localPlayer) {
+            const moveX = p.target.x - a.root.position.x;
+            const moveZ = p.target.z - a.root.position.z;
+            const moveDist = Math.hypot(moveX, moveZ);
+            a.root.position.lerp(p.target, .22);
+            if (p.action === "walk" && moveDist > 0.05) {
+                const targetRot = Math.atan2(moveX, moveZ);
+                a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, targetRot, 10, dt);
+            } else if (p.action === "prostrate") {
+                // Khi quỳ bái cờ, xoay mặt thẳng về phía cờ thiêng (hướng -Z)
+                a.root.rotation.y = THREE.MathUtils.damp(a.root.rotation.y, Math.PI, 10, dt);
+            }
+        }
         const interaction = [...activeInteractions.values()].find(v => (v.a === p.id || v.b === p.id) && v.until > performance.now()); const cheering = active === "cheer", bowing = active === "bow", walking = active === "walk", prostrating = active === "prostrate", standingSpot = active === "sit", carried = active === "carried";
         // A low, stable kneeling bow: legs fold first, torso lowers from the hips.
         const pose = prostrating ? 1 : bowing ? .48 : 0;
@@ -441,6 +461,29 @@ function animate() {
     // Passenger follows the carrier locally; only relationship changes are sent to the server.
     for (const [key, v] of activeInteractions) { if (v.until <= performance.now()) { activeInteractions.delete(key); for (const id of [v.a, v.b]) { const q = players.get(id); if (q && ["highfive", "handshake", "push"].includes(q.action)) q.action = "idle"; } } }
     for (const passenger of players.values()) { if (!passenger.carriedBy) continue; const carrier = players.get(passenger.carriedBy); if (!carrier) continue; const offset = passenger.carryStyle === "bridal" ? new THREE.Vector3(.62, .72, .02) : new THREE.Vector3(0, 1.12, -.42); carrier.avatar.root.localToWorld(offset); passenger.avatar.root.position.copy(offset); passenger.avatar.root.rotation.y = carrier.avatar.root.rotation.y; passenger.avatar.root.rotation.z = passenger.carryStyle === "bridal" ? Math.PI / 2 : 0; }
+    // === CẬP NHẬT TỌA ĐỘ BONG BÓNG THOẠI HTML 3D CHIẾU LÊN MÀN HÌNH ===
+    if (activeBubbles.size > 0 && camera) {
+        const halfW = window.innerWidth * 0.5;
+        const halfH = window.innerHeight * 0.5;
+        for (const [playerId, b] of activeBubbles) {
+            const p = players.get(playerId);
+            if (!p || !p.avatar || !p.avatar.root) {
+                b.el.style.display = 'none';
+                continue;
+            }
+            _bubblePos.set(0, 2.75, 0);
+            p.avatar.root.localToWorld(_bubblePos);
+            _bubblePos.project(camera);
+            if (_bubblePos.z > 1) {
+                b.el.style.display = 'none';
+            } else {
+                const screenX = (_bubblePos.x * halfW) + halfW;
+                const screenY = (-(_bubblePos.y * halfH)) + halfH;
+                b.el.style.display = 'block';
+                b.el.style.transform = `translate3d(calc(${screenX}px - 50%), calc(${screenY}px - 100%), 0)`;
+            }
+        }
+    }
     renderer.render(scene, camera);
 }
 // === AUDIO ENGINE HANG MU V21: NHẠC NỀN (1.mp3/1.m4a) & HÔ CỔ VŨ (2.mp3/2.m4a) CÓ DUCKING ===
